@@ -4,10 +4,7 @@ Code and RMarkdown for "Ignorable and non-ignorable missing data in hidden Marko
 
 ## Packages and versions
 
-The paper was compiled with the following software and versions:
- 
-- R 4.1.1
-- depmixS4 1.5-0
+For R version and package versions used to compile the paper, please see the `sessionInfo.txt` file.
 
 ## Paper
 
