@@ -1,0 +1,4189 @@
+
+R version 4.1.1 (2021-08-10) -- "Kick Things"
+Copyright (C) 2021 The R Foundation for Statistical Computing
+Platform: x86_64-pc-linux-gnu (64-bit)
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+  Natural language support but running in an English locale
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+[Previously saved workspace restored]
+
+> library(depmixS4)
+Loading required package: nnet
+Loading required package: MASS
+Loading required package: Rsolnp
+Loading required package: nlme
+> 
+> nsim <- 1000
+> nrep <- 100
+> nt <- 50
+> 
+> # ## simulation 1
+> set.seed(202109011)
+> randomSeeds <- sample(seq(1,nsim*1000),nsim)
+> out <- rep(list(vector("list",3)),nsim)
+> 
+> prior <- c(8,1,1)
+> prior <- prior/sum(prior)
+> transition <- 5*diag(3) + 1
+> transition <- transition/rowSums(transition)
+> means <- c(-1,0,1)
+> sds <- c(1,1,1)
+> pmiss <- c(.05,.25,.5)
+> 
+> truepars1 <- c(prior,as.numeric(t(transition)),as.numeric(rbind(means,sds)))
+> truepars2 <- c(prior,as.numeric(t(transition)),as.numeric(rbind(means,sds,1-pmiss,pmiss)))
+> truepars3 <- c(prior,as.numeric(t(transition)),as.numeric(rbind(means,sds,log(pmiss/(1-pmiss)),c(0,0,0))))
+> 
+> generate_data <- function() {
++   truestate <- matrix(nrow=nt,ncol=nrep)
++   for(i in 1:nrep) {
++     truestate[1,i] <- sample(1:3,size=1,prob=prior)
++     for(t in 2:nt) {
++       truestate[t,i] <- sample(1:3,size=1,prob=transition[truestate[t-1,i],])
++     }
++   }
++   dat <- data.frame(trueState=as.numeric(truestate),trial=1:nt)
++   dat$trueResponse <- rnorm(nrow(dat),mean=means[dat$trueState],sd=sds[dat$trueState])
++   dat$missing <- rbinom(nrow(dat),size=1,prob=pmiss[dat$trueState])
++   dat$response <- dat$trueResponse
++   dat$response[dat$missing==1] <- NA
++   return(dat)
++ }
+> 
+> 
+> for(sim in 1:nsim) {
++   set.seed(randomSeeds[sim])
++   dat <- generate_data()
++ 
++   set.seed(randomSeeds[sim])
++   mod <- depmix(list(response~1),family=list(gaussian()),data=dat,nstates=3,ntimes=rep(nt,nrep))
++   mod <- setpars(mod,truepars1)
++   ok <- FALSE
++   nTry <- 1
++   while(!ok && nTry < 21) {
++     fmod <- try(fit(mod,emcontrol=em.control(maxit = 5000, random.start = nTry > 1),verbose=FALSE))
++     if(!inherits(fmod,"try-error")) {
++       if(fmod@message == "Log likelihood converged to within tol. (relative change)") {
++         cat("mod1 simulation",sim,"iteration",nTry,"completed.\n")
++         ok <- TRUE
++         out[[sim]][[1]] <- list(pars=getpars(fmod),logLik=logLik(fmod),viterbi=posterior(fmod, type="global"),trueState=dat$trueState)
++       } else {
++         cat("mod1 simulation",sim,"iteration",nTry,"failed.\n")
++         nTry <- nTry + 1
++       }
++     } else {
++       cat("mod1 simulation",sim,"iteration",nTry,"failed.\n")
++       nTry <- nTry + 1
++     }
++   }
++ 
++ 
++   set.seed(randomSeeds[sim])
++   mod <- depmix(list(response~1,missing~1),family=list(gaussian(),multinomial("identity")),data=dat,nstates=3,ntimes=rep(nt,nrep))
++   mod <- setpars(mod,truepars2)
++   ok <- FALSE
++   nTry <- 1
++   while(!ok && nTry < 21) {
++     fmod <- try(fit(mod,emcontrol=em.control(maxit = 5000, random.start = nTry > 1),verbose=FALSE))
++     if(!inherits(fmod,"try-error")) {
++       if(fmod@message == "Log likelihood converged to within tol. (relative change)") {
++         cat("mod2 simulation",sim,"iteration",nTry,"completed.\n")
++         ok <- TRUE
++         out[[sim]][[2]] <- list(pars=getpars(fmod),logLik=logLik(fmod),viterbi=posterior(fmod, type="global"),trueState=dat$trueState)
++       } else {
++         cat("mod2 simulation",sim,"iteration",nTry,"failed.\n")
++         nTry <- nTry + 1
++       }
++     } else {
++       cat("mod2 simulation",sim,"iteration",nTry,"failed.\n")
++       nTry <- nTry + 1
++     }
++   }
++ }
+converged at iteration 551 with logLik: -5918.189 
+mod1 simulation 1 iteration 1 completed.
+converged at iteration 624 with logLik: -8660.581 
+mod2 simulation 1 iteration 1 completed.
+converged at iteration 286 with logLik: -5978.032 
+mod1 simulation 2 iteration 1 completed.
+converged at iteration 365 with logLik: -8696.846 
+mod2 simulation 2 iteration 1 completed.
+converged at iteration 632 with logLik: -6118.291 
+mod1 simulation 3 iteration 1 completed.
+converged at iteration 503 with logLik: -8798.407 
+mod2 simulation 3 iteration 1 completed.
+converged at iteration 668 with logLik: -5927.435 
+mod1 simulation 4 iteration 1 completed.
+converged at iteration 119 with logLik: -8712.629 
+mod2 simulation 4 iteration 1 completed.
+converged at iteration 1179 with logLik: -5956.769 
+mod1 simulation 5 iteration 1 completed.
+converged at iteration 340 with logLik: -8660.25 
+mod2 simulation 5 iteration 1 completed.
+converged at iteration 742 with logLik: -5928.974 
+mod1 simulation 6 iteration 1 completed.
+converged at iteration 520 with logLik: -8681.677 
+mod2 simulation 6 iteration 1 completed.
+converged at iteration 749 with logLik: -6074.616 
+mod1 simulation 7 iteration 1 completed.
+converged at iteration 1187 with logLik: -8767.472 
+mod2 simulation 7 iteration 1 completed.
+converged at iteration 513 with logLik: -5927.846 
+mod1 simulation 8 iteration 1 completed.
+converged at iteration 763 with logLik: -8673.42 
+mod2 simulation 8 iteration 1 completed.
+converged at iteration 437 with logLik: -5938.159 
+mod1 simulation 9 iteration 1 completed.
+converged at iteration 317 with logLik: -8735.216 
+mod2 simulation 9 iteration 1 completed.
+converged at iteration 219 with logLik: -5951.879 
+mod1 simulation 10 iteration 1 completed.
+converged at iteration 297 with logLik: -8677.084 
+mod2 simulation 10 iteration 1 completed.
+converged at iteration 231 with logLik: -6003.156 
+mod1 simulation 11 iteration 1 completed.
+converged at iteration 711 with logLik: -8739.431 
+mod2 simulation 11 iteration 1 completed.
+converged at iteration 536 with logLik: -6016.818 
+mod1 simulation 12 iteration 1 completed.
+converged at iteration 551 with logLik: -8708.127 
+mod2 simulation 12 iteration 1 completed.
+converged at iteration 1305 with logLik: -6050.635 
+mod1 simulation 13 iteration 1 completed.
+converged at iteration 1324 with logLik: -8761.925 
+mod2 simulation 13 iteration 1 completed.
+converged at iteration 551 with logLik: -6081.026 
+mod1 simulation 14 iteration 1 completed.
+converged at iteration 442 with logLik: -8787.967 
+mod2 simulation 14 iteration 1 completed.
+converged at iteration 191 with logLik: -6129.715 
+mod1 simulation 15 iteration 1 completed.
+converged at iteration 147 with logLik: -8819.182 
+mod2 simulation 15 iteration 1 completed.
+converged at iteration 709 with logLik: -6062.838 
+mod1 simulation 16 iteration 1 completed.
+converged at iteration 957 with logLik: -8757.869 
+mod2 simulation 16 iteration 1 completed.
+converged at iteration 391 with logLik: -5972.538 
+mod1 simulation 17 iteration 1 completed.
+converged at iteration 545 with logLik: -8719.884 
+mod2 simulation 17 iteration 1 completed.
+converged at iteration 374 with logLik: -6060.295 
+mod1 simulation 18 iteration 1 completed.
+converged at iteration 353 with logLik: -8746.118 
+mod2 simulation 18 iteration 1 completed.
+converged at iteration 1117 with logLik: -6050.908 
+mod1 simulation 19 iteration 1 completed.
+converged at iteration 1839 with logLik: -8762.954 
+mod2 simulation 19 iteration 1 completed.
+converged at iteration 1196 with logLik: -5960.52 
+mod1 simulation 20 iteration 1 completed.
+converged at iteration 699 with logLik: -8696.089 
+mod2 simulation 20 iteration 1 completed.
+converged at iteration 409 with logLik: -6008.606 
+mod1 simulation 21 iteration 1 completed.
+converged at iteration 355 with logLik: -8738.254 
+mod2 simulation 21 iteration 1 completed.
+converged at iteration 275 with logLik: -6042.979 
+mod1 simulation 22 iteration 1 completed.
+converged at iteration 209 with logLik: -8711.907 
+mod2 simulation 22 iteration 1 completed.
+converged at iteration 627 with logLik: -6055.807 
+mod1 simulation 23 iteration 1 completed.
+converged at iteration 407 with logLik: -8774.751 
+mod2 simulation 23 iteration 1 completed.
+converged at iteration 2498 with logLik: -6095.348 
+mod1 simulation 24 iteration 1 completed.
+converged at iteration 856 with logLik: -8783.835 
+mod2 simulation 24 iteration 1 completed.
+converged at iteration 1538 with logLik: -5933.016 
+mod1 simulation 25 iteration 1 completed.
+converged at iteration 1043 with logLik: -8642.593 
+mod2 simulation 25 iteration 1 completed.
+converged at iteration 392 with logLik: -5979.142 
+mod1 simulation 26 iteration 1 completed.
+converged at iteration 262 with logLik: -8715.244 
+mod2 simulation 26 iteration 1 completed.
+converged at iteration 1337 with logLik: -5939.595 
+mod1 simulation 27 iteration 1 completed.
+converged at iteration 576 with logLik: -8660.836 
+mod2 simulation 27 iteration 1 completed.
+converged at iteration 692 with logLik: -6067.466 
+mod1 simulation 28 iteration 1 completed.
+converged at iteration 607 with logLik: -8752.209 
+mod2 simulation 28 iteration 1 completed.
+converged at iteration 346 with logLik: -6008.057 
+mod1 simulation 29 iteration 1 completed.
+converged at iteration 266 with logLik: -8747.632 
+mod2 simulation 29 iteration 1 completed.
+converged at iteration 908 with logLik: -6047.655 
+mod1 simulation 30 iteration 1 completed.
+converged at iteration 1036 with logLik: -8688.823 
+mod2 simulation 30 iteration 1 completed.
+converged at iteration 686 with logLik: -6144.448 
+mod1 simulation 31 iteration 1 completed.
+converged at iteration 852 with logLik: -8822.148 
+mod2 simulation 31 iteration 1 completed.
+converged at iteration 789 with logLik: -5900.641 
+mod1 simulation 32 iteration 1 completed.
+converged at iteration 520 with logLik: -8707.625 
+mod2 simulation 32 iteration 1 completed.
+converged at iteration 608 with logLik: -5972.032 
+mod1 simulation 33 iteration 1 completed.
+converged at iteration 147 with logLik: -8707.713 
+mod2 simulation 33 iteration 1 completed.
+converged at iteration 715 with logLik: -5995.94 
+mod1 simulation 34 iteration 1 completed.
+converged at iteration 310 with logLik: -8772.814 
+mod2 simulation 34 iteration 1 completed.
+converged at iteration 435 with logLik: -6043.461 
+mod1 simulation 35 iteration 1 completed.
+converged at iteration 202 with logLik: -8760.582 
+mod2 simulation 35 iteration 1 completed.
+converged at iteration 527 with logLik: -6171.252 
+mod1 simulation 36 iteration 1 completed.
+converged at iteration 276 with logLik: -8845.92 
+mod2 simulation 36 iteration 1 completed.
+converged at iteration 718 with logLik: -6131.21 
+mod1 simulation 37 iteration 1 completed.
+converged at iteration 131 with logLik: -8857.33 
+mod2 simulation 37 iteration 1 completed.
+converged at iteration 1148 with logLik: -5874.646 
+mod1 simulation 38 iteration 1 completed.
+converged at iteration 1446 with logLik: -8657.79 
+mod2 simulation 38 iteration 1 completed.
+converged at iteration 1046 with logLik: -6083.113 
+mod1 simulation 39 iteration 1 completed.
+converged at iteration 314 with logLik: -8746.23 
+mod2 simulation 39 iteration 1 completed.
+converged at iteration 763 with logLik: -6071.644 
+mod1 simulation 40 iteration 1 completed.
+converged at iteration 778 with logLik: -8753.639 
+mod2 simulation 40 iteration 1 completed.
+converged at iteration 360 with logLik: -6097.88 
+mod1 simulation 41 iteration 1 completed.
+converged at iteration 970 with logLik: -8803.102 
+mod2 simulation 41 iteration 1 completed.
+converged at iteration 341 with logLik: -5987.125 
+mod1 simulation 42 iteration 1 completed.
+converged at iteration 423 with logLik: -8741.363 
+mod2 simulation 42 iteration 1 completed.
+converged at iteration 1311 with logLik: -6150.012 
+mod1 simulation 43 iteration 1 completed.
+converged at iteration 498 with logLik: -8850.073 
+mod2 simulation 43 iteration 1 completed.
+converged at iteration 580 with logLik: -6122.005 
+mod1 simulation 44 iteration 1 completed.
+converged at iteration 323 with logLik: -8849.902 
+mod2 simulation 44 iteration 1 completed.
+converged at iteration 4468 with logLik: -5962.746 
+mod1 simulation 45 iteration 1 completed.
+converged at iteration 258 with logLik: -8707.518 
+mod2 simulation 45 iteration 1 completed.
+converged at iteration 348 with logLik: -5945.307 
+mod1 simulation 46 iteration 1 completed.
+converged at iteration 196 with logLik: -8680.966 
+mod2 simulation 46 iteration 1 completed.
+converged at iteration 2010 with logLik: -6073.331 
+mod1 simulation 47 iteration 1 completed.
+converged at iteration 641 with logLik: -8802.838 
+mod2 simulation 47 iteration 1 completed.
+converged at iteration 1138 with logLik: -5967.139 
+mod1 simulation 48 iteration 1 completed.
+converged at iteration 469 with logLik: -8677.713 
+mod2 simulation 48 iteration 1 completed.
+converged at iteration 2084 with logLik: -6052.29 
+mod1 simulation 49 iteration 1 completed.
+converged at iteration 921 with logLik: -8722.438 
+mod2 simulation 49 iteration 1 completed.
+converged at iteration 268 with logLik: -6038.602 
+mod1 simulation 50 iteration 1 completed.
+converged at iteration 221 with logLik: -8762.285 
+mod2 simulation 50 iteration 1 completed.
+converged at iteration 634 with logLik: -6040.283 
+mod1 simulation 51 iteration 1 completed.
+converged at iteration 1310 with logLik: -8730.989 
+mod2 simulation 51 iteration 1 completed.
+converged at iteration 1315 with logLik: -5902.215 
+mod1 simulation 52 iteration 1 completed.
+converged at iteration 338 with logLik: -8671.54 
+mod2 simulation 52 iteration 1 completed.
+converged at iteration 770 with logLik: -6047.901 
+mod1 simulation 53 iteration 1 completed.
+converged at iteration 370 with logLik: -8689.627 
+mod2 simulation 53 iteration 1 completed.
+converged at iteration 577 with logLik: -5977.096 
+mod1 simulation 54 iteration 1 completed.
+converged at iteration 308 with logLik: -8729.164 
+mod2 simulation 54 iteration 1 completed.
+converged at iteration 669 with logLik: -5980.856 
+mod1 simulation 55 iteration 1 completed.
+converged at iteration 1046 with logLik: -8759.314 
+mod2 simulation 55 iteration 1 completed.
+converged at iteration 1273 with logLik: -5917.154 
+mod1 simulation 56 iteration 1 completed.
+converged at iteration 657 with logLik: -8665.606 
+mod2 simulation 56 iteration 1 completed.
+converged at iteration 1547 with logLik: -6036.04 
+mod1 simulation 57 iteration 1 completed.
+converged at iteration 1206 with logLik: -8736.079 
+mod2 simulation 57 iteration 1 completed.
+converged at iteration 360 with logLik: -6048.021 
+mod1 simulation 58 iteration 1 completed.
+converged at iteration 310 with logLik: -8776.347 
+mod2 simulation 58 iteration 1 completed.
+converged at iteration 399 with logLik: -5980.988 
+mod1 simulation 59 iteration 1 completed.
+converged at iteration 812 with logLik: -8701.845 
+mod2 simulation 59 iteration 1 completed.
+converged at iteration 222 with logLik: -5981.528 
+mod1 simulation 60 iteration 1 completed.
+converged at iteration 343 with logLik: -8694.716 
+mod2 simulation 60 iteration 1 completed.
+converged at iteration 1219 with logLik: -5945.611 
+mod1 simulation 61 iteration 1 completed.
+converged at iteration 210 with logLik: -8696.802 
+mod2 simulation 61 iteration 1 completed.
+converged at iteration 857 with logLik: -6032.951 
+mod1 simulation 62 iteration 1 completed.
+converged at iteration 820 with logLik: -8718.966 
+mod2 simulation 62 iteration 1 completed.
+converged at iteration 435 with logLik: -6086.995 
+mod1 simulation 63 iteration 1 completed.
+converged at iteration 912 with logLik: -8794.251 
+mod2 simulation 63 iteration 1 completed.
+converged at iteration 983 with logLik: -5870.545 
+mod1 simulation 64 iteration 1 completed.
+converged at iteration 814 with logLik: -8641.911 
+mod2 simulation 64 iteration 1 completed.
+converged at iteration 595 with logLik: -6062.841 
+mod1 simulation 65 iteration 1 completed.
+converged at iteration 203 with logLik: -8774.311 
+mod2 simulation 65 iteration 1 completed.
+converged at iteration 977 with logLik: -5961.298 
+mod1 simulation 66 iteration 1 completed.
+converged at iteration 691 with logLik: -8723.147 
+mod2 simulation 66 iteration 1 completed.
+converged at iteration 199 with logLik: -6019.125 
+mod1 simulation 67 iteration 1 completed.
+converged at iteration 213 with logLik: -8776.297 
+mod2 simulation 67 iteration 1 completed.
+converged at iteration 384 with logLik: -6029.415 
+mod1 simulation 68 iteration 1 completed.
+converged at iteration 143 with logLik: -8755.477 
+mod2 simulation 68 iteration 1 completed.
+converged at iteration 1218 with logLik: -6036.943 
+mod1 simulation 69 iteration 1 completed.
+converged at iteration 426 with logLik: -8728.071 
+mod2 simulation 69 iteration 1 completed.
+converged at iteration 2191 with logLik: -6001.551 
+mod1 simulation 70 iteration 1 completed.
+converged at iteration 846 with logLik: -8764.377 
+mod2 simulation 70 iteration 1 completed.
+converged at iteration 525 with logLik: -6156.389 
+mod1 simulation 71 iteration 1 completed.
+converged at iteration 1253 with logLik: -8841.923 
+mod2 simulation 71 iteration 1 completed.
+converged at iteration 2358 with logLik: -6030.465 
+mod1 simulation 72 iteration 1 completed.
+converged at iteration 410 with logLik: -8788.202 
+mod2 simulation 72 iteration 1 completed.
+converged at iteration 715 with logLik: -6036.005 
+mod1 simulation 73 iteration 1 completed.
+converged at iteration 645 with logLik: -8711.977 
+mod2 simulation 73 iteration 1 completed.
+converged at iteration 361 with logLik: -5999.859 
+mod1 simulation 74 iteration 1 completed.
+converged at iteration 219 with logLik: -8717.727 
+mod2 simulation 74 iteration 1 completed.
+converged at iteration 725 with logLik: -6026.024 
+mod1 simulation 75 iteration 1 completed.
+converged at iteration 767 with logLik: -8781.242 
+mod2 simulation 75 iteration 1 completed.
+converged at iteration 1810 with logLik: -6082.65 
+mod1 simulation 76 iteration 1 completed.
+converged at iteration 581 with logLik: -8813.728 
+mod2 simulation 76 iteration 1 completed.
+converged at iteration 602 with logLik: -5833.883 
+mod1 simulation 77 iteration 1 completed.
+converged at iteration 526 with logLik: -8656.618 
+mod2 simulation 77 iteration 1 completed.
+converged at iteration 129 with logLik: -5947.706 
+mod1 simulation 78 iteration 1 completed.
+converged at iteration 509 with logLik: -8705.364 
+mod2 simulation 78 iteration 1 completed.
+converged at iteration 380 with logLik: -6041.652 
+mod1 simulation 79 iteration 1 completed.
+converged at iteration 232 with logLik: -8758.184 
+mod2 simulation 79 iteration 1 completed.
+converged at iteration 1900 with logLik: -6023.167 
+mod1 simulation 80 iteration 1 completed.
+converged at iteration 370 with logLik: -8756.228 
+mod2 simulation 80 iteration 1 completed.
+converged at iteration 516 with logLik: -5936.849 
+mod1 simulation 81 iteration 1 completed.
+converged at iteration 568 with logLik: -8693.157 
+mod2 simulation 81 iteration 1 completed.
+converged at iteration 1175 with logLik: -6030.395 
+mod1 simulation 82 iteration 1 completed.
+converged at iteration 1147 with logLik: -8708.552 
+mod2 simulation 82 iteration 1 completed.
+converged at iteration 957 with logLik: -5942.952 
+mod1 simulation 83 iteration 1 completed.
+converged at iteration 2064 with logLik: -8655.68 
+mod2 simulation 83 iteration 1 completed.
+converged at iteration 1218 with logLik: -6046.725 
+mod1 simulation 84 iteration 1 completed.
+converged at iteration 565 with logLik: -8760.255 
+mod2 simulation 84 iteration 1 completed.
+converged at iteration 721 with logLik: -6076.211 
+mod1 simulation 85 iteration 1 completed.
+converged at iteration 683 with logLik: -8795.021 
+mod2 simulation 85 iteration 1 completed.
+converged at iteration 1787 with logLik: -6065.784 
+mod1 simulation 86 iteration 1 completed.
+converged at iteration 348 with logLik: -8796.532 
+mod2 simulation 86 iteration 1 completed.
+converged at iteration 357 with logLik: -6235.363 
+mod1 simulation 87 iteration 1 completed.
+converged at iteration 351 with logLik: -8879.743 
+mod2 simulation 87 iteration 1 completed.
+converged at iteration 887 with logLik: -6034.836 
+mod1 simulation 88 iteration 1 completed.
+converged at iteration 786 with logLik: -8759.638 
+mod2 simulation 88 iteration 1 completed.
+converged at iteration 2254 with logLik: -6045.771 
+mod1 simulation 89 iteration 1 completed.
+converged at iteration 294 with logLik: -8792.182 
+mod2 simulation 89 iteration 1 completed.
+converged at iteration 358 with logLik: -6096.916 
+mod1 simulation 90 iteration 1 completed.
+converged at iteration 351 with logLik: -8806.803 
+mod2 simulation 90 iteration 1 completed.
+converged at iteration 1645 with logLik: -5994.408 
+mod1 simulation 91 iteration 1 completed.
+converged at iteration 526 with logLik: -8745.706 
+mod2 simulation 91 iteration 1 completed.
+converged at iteration 624 with logLik: -6060.005 
+mod1 simulation 92 iteration 1 completed.
+converged at iteration 655 with logLik: -8751.477 
+mod2 simulation 92 iteration 1 completed.
+converged at iteration 462 with logLik: -5858.132 
+mod1 simulation 93 iteration 1 completed.
+converged at iteration 310 with logLik: -8630.176 
+mod2 simulation 93 iteration 1 completed.
+converged at iteration 503 with logLik: -6063.216 
+mod1 simulation 94 iteration 1 completed.
+converged at iteration 218 with logLik: -8773.26 
+mod2 simulation 94 iteration 1 completed.
+converged at iteration 311 with logLik: -6012.776 
+mod1 simulation 95 iteration 1 completed.
+converged at iteration 144 with logLik: -8722.351 
+mod2 simulation 95 iteration 1 completed.
+converged at iteration 240 with logLik: -6002.519 
+mod1 simulation 96 iteration 1 completed.
+converged at iteration 460 with logLik: -8744.078 
+mod2 simulation 96 iteration 1 completed.
+converged at iteration 684 with logLik: -6000.873 
+mod1 simulation 97 iteration 1 completed.
+converged at iteration 526 with logLik: -8775.732 
+mod2 simulation 97 iteration 1 completed.
+converged at iteration 720 with logLik: -6103.004 
+mod1 simulation 98 iteration 1 completed.
+converged at iteration 237 with logLik: -8757.106 
+mod2 simulation 98 iteration 1 completed.
+converged at iteration 819 with logLik: -6079.657 
+mod1 simulation 99 iteration 1 completed.
+converged at iteration 520 with logLik: -8783.509 
+mod2 simulation 99 iteration 1 completed.
+converged at iteration 1090 with logLik: -5964.093 
+mod1 simulation 100 iteration 1 completed.
+converged at iteration 191 with logLik: -8677.699 
+mod2 simulation 100 iteration 1 completed.
+converged at iteration 641 with logLik: -6129.878 
+mod1 simulation 101 iteration 1 completed.
+converged at iteration 461 with logLik: -8837.89 
+mod2 simulation 101 iteration 1 completed.
+converged at iteration 764 with logLik: -5900.918 
+mod1 simulation 102 iteration 1 completed.
+converged at iteration 618 with logLik: -8692.482 
+mod2 simulation 102 iteration 1 completed.
+converged at iteration 306 with logLik: -6034.543 
+mod1 simulation 103 iteration 1 completed.
+converged at iteration 206 with logLik: -8723.99 
+mod2 simulation 103 iteration 1 completed.
+converged at iteration 762 with logLik: -6089.667 
+mod1 simulation 104 iteration 1 completed.
+converged at iteration 1740 with logLik: -8802.754 
+mod2 simulation 104 iteration 1 completed.
+converged at iteration 570 with logLik: -5999.571 
+mod1 simulation 105 iteration 1 completed.
+converged at iteration 363 with logLik: -8700.814 
+mod2 simulation 105 iteration 1 completed.
+converged at iteration 870 with logLik: -5980.969 
+mod1 simulation 106 iteration 1 completed.
+converged at iteration 181 with logLik: -8719.444 
+mod2 simulation 106 iteration 1 completed.
+converged at iteration 313 with logLik: -6000.286 
+mod1 simulation 107 iteration 1 completed.
+converged at iteration 208 with logLik: -8679.32 
+mod2 simulation 107 iteration 1 completed.
+converged at iteration 558 with logLik: -6095.415 
+mod1 simulation 108 iteration 1 completed.
+converged at iteration 738 with logLik: -8752.548 
+mod2 simulation 108 iteration 1 completed.
+converged at iteration 572 with logLik: -6122.232 
+mod1 simulation 109 iteration 1 completed.
+converged at iteration 337 with logLik: -8804.93 
+mod2 simulation 109 iteration 1 completed.
+converged at iteration 392 with logLik: -6011.021 
+mod1 simulation 110 iteration 1 completed.
+converged at iteration 506 with logLik: -8758.654 
+mod2 simulation 110 iteration 1 completed.
+converged at iteration 483 with logLik: -6090.309 
+mod1 simulation 111 iteration 1 completed.
+converged at iteration 592 with logLik: -8744.572 
+mod2 simulation 111 iteration 1 completed.
+converged at iteration 502 with logLik: -6049.933 
+mod1 simulation 112 iteration 1 completed.
+converged at iteration 214 with logLik: -8740.892 
+mod2 simulation 112 iteration 1 completed.
+converged at iteration 679 with logLik: -5885.333 
+mod1 simulation 113 iteration 1 completed.
+converged at iteration 629 with logLik: -8737.089 
+mod2 simulation 113 iteration 1 completed.
+converged at iteration 1450 with logLik: -6050.473 
+mod1 simulation 114 iteration 1 completed.
+converged at iteration 1208 with logLik: -8749.585 
+mod2 simulation 114 iteration 1 completed.
+converged at iteration 1091 with logLik: -6047.826 
+mod1 simulation 115 iteration 1 completed.
+converged at iteration 481 with logLik: -8759.535 
+mod2 simulation 115 iteration 1 completed.
+converged at iteration 594 with logLik: -5987.616 
+mod1 simulation 116 iteration 1 completed.
+converged at iteration 513 with logLik: -8723.789 
+mod2 simulation 116 iteration 1 completed.
+converged at iteration 607 with logLik: -5978.953 
+mod1 simulation 117 iteration 1 completed.
+converged at iteration 331 with logLik: -8716.148 
+mod2 simulation 117 iteration 1 completed.
+converged at iteration 941 with logLik: -5957.924 
+mod1 simulation 118 iteration 1 completed.
+converged at iteration 1289 with logLik: -8740.519 
+mod2 simulation 118 iteration 1 completed.
+converged at iteration 198 with logLik: -6014.775 
+mod1 simulation 119 iteration 1 completed.
+converged at iteration 409 with logLik: -8772.777 
+mod2 simulation 119 iteration 1 completed.
+converged at iteration 1868 with logLik: -6060.582 
+mod1 simulation 120 iteration 1 completed.
+converged at iteration 330 with logLik: -8762.271 
+mod2 simulation 120 iteration 1 completed.
+converged at iteration 347 with logLik: -6076.214 
+mod1 simulation 121 iteration 1 completed.
+converged at iteration 274 with logLik: -8751.679 
+mod2 simulation 121 iteration 1 completed.
+converged at iteration 801 with logLik: -6022.075 
+mod1 simulation 122 iteration 1 completed.
+converged at iteration 508 with logLik: -8732.488 
+mod2 simulation 122 iteration 1 completed.
+converged at iteration 425 with logLik: -6060.707 
+mod1 simulation 123 iteration 1 completed.
+converged at iteration 599 with logLik: -8800.715 
+mod2 simulation 123 iteration 1 completed.
+converged at iteration 710 with logLik: -6059.785 
+mod1 simulation 124 iteration 1 completed.
+converged at iteration 968 with logLik: -8714.238 
+mod2 simulation 124 iteration 1 completed.
+converged at iteration 3988 with logLik: -5991.303 
+mod1 simulation 125 iteration 1 completed.
+converged at iteration 291 with logLik: -8770.289 
+mod2 simulation 125 iteration 1 completed.
+converged at iteration 527 with logLik: -6091.666 
+mod1 simulation 126 iteration 1 completed.
+converged at iteration 319 with logLik: -8790.004 
+mod2 simulation 126 iteration 1 completed.
+converged at iteration 575 with logLik: -5928.935 
+mod1 simulation 127 iteration 1 completed.
+converged at iteration 814 with logLik: -8654.775 
+mod2 simulation 127 iteration 1 completed.
+converged at iteration 375 with logLik: -6015.977 
+mod1 simulation 128 iteration 1 completed.
+converged at iteration 346 with logLik: -8775.361 
+mod2 simulation 128 iteration 1 completed.
+converged at iteration 771 with logLik: -6000.482 
+mod1 simulation 129 iteration 1 completed.
+converged at iteration 413 with logLik: -8726.985 
+mod2 simulation 129 iteration 1 completed.
+converged at iteration 2253 with logLik: -6075.706 
+mod1 simulation 130 iteration 1 completed.
+converged at iteration 424 with logLik: -8787.106 
+mod2 simulation 130 iteration 1 completed.
+converged at iteration 550 with logLik: -6022.347 
+mod1 simulation 131 iteration 1 completed.
+converged at iteration 295 with logLik: -8709.13 
+mod2 simulation 131 iteration 1 completed.
+converged at iteration 1212 with logLik: -5991.597 
+mod1 simulation 132 iteration 1 completed.
+converged at iteration 954 with logLik: -8694.799 
+mod2 simulation 132 iteration 1 completed.
+converged at iteration 1983 with logLik: -6011.059 
+mod1 simulation 133 iteration 1 completed.
+converged at iteration 192 with logLik: -8736.223 
+mod2 simulation 133 iteration 1 completed.
+converged at iteration 894 with logLik: -5986.698 
+mod1 simulation 134 iteration 1 completed.
+converged at iteration 284 with logLik: -8685.057 
+mod2 simulation 134 iteration 1 completed.
+converged at iteration 865 with logLik: -6003.241 
+mod1 simulation 135 iteration 1 completed.
+converged at iteration 655 with logLik: -8700.35 
+mod2 simulation 135 iteration 1 completed.
+converged at iteration 387 with logLik: -6086.952 
+mod1 simulation 136 iteration 1 completed.
+converged at iteration 191 with logLik: -8772.739 
+mod2 simulation 136 iteration 1 completed.
+converged at iteration 291 with logLik: -6030.123 
+mod1 simulation 137 iteration 1 completed.
+converged at iteration 433 with logLik: -8691.51 
+mod2 simulation 137 iteration 1 completed.
+converged at iteration 313 with logLik: -6039.715 
+mod1 simulation 138 iteration 1 completed.
+converged at iteration 378 with logLik: -8771.02 
+mod2 simulation 138 iteration 1 completed.
+converged at iteration 267 with logLik: -5911.05 
+mod1 simulation 139 iteration 1 completed.
+converged at iteration 208 with logLik: -8664.85 
+mod2 simulation 139 iteration 1 completed.
+converged at iteration 3106 with logLik: -6096.005 
+mod1 simulation 140 iteration 1 completed.
+converged at iteration 1734 with logLik: -8806.39 
+mod2 simulation 140 iteration 1 completed.
+converged at iteration 469 with logLik: -6048.95 
+mod1 simulation 141 iteration 1 completed.
+converged at iteration 339 with logLik: -8741.613 
+mod2 simulation 141 iteration 1 completed.
+converged at iteration 437 with logLik: -5963.565 
+mod1 simulation 142 iteration 1 completed.
+converged at iteration 284 with logLik: -8755.833 
+mod2 simulation 142 iteration 1 completed.
+converged at iteration 595 with logLik: -6007.709 
+mod1 simulation 143 iteration 1 completed.
+converged at iteration 461 with logLik: -8729.641 
+mod2 simulation 143 iteration 1 completed.
+converged at iteration 960 with logLik: -6026.355 
+mod1 simulation 144 iteration 1 completed.
+converged at iteration 203 with logLik: -8700.947 
+mod2 simulation 144 iteration 1 completed.
+converged at iteration 853 with logLik: -5969.586 
+mod1 simulation 145 iteration 1 completed.
+converged at iteration 624 with logLik: -8730.11 
+mod2 simulation 145 iteration 1 completed.
+converged at iteration 439 with logLik: -5987.283 
+mod1 simulation 146 iteration 1 completed.
+converged at iteration 279 with logLik: -8693.572 
+mod2 simulation 146 iteration 1 completed.
+converged at iteration 1496 with logLik: -6110.279 
+mod1 simulation 147 iteration 1 completed.
+converged at iteration 906 with logLik: -8772.285 
+mod2 simulation 147 iteration 1 completed.
+converged at iteration 897 with logLik: -5916.11 
+mod1 simulation 148 iteration 1 completed.
+converged at iteration 262 with logLik: -8654.134 
+mod2 simulation 148 iteration 1 completed.
+converged at iteration 514 with logLik: -6047.689 
+mod1 simulation 149 iteration 1 completed.
+converged at iteration 334 with logLik: -8764.717 
+mod2 simulation 149 iteration 1 completed.
+converged at iteration 371 with logLik: -5967.772 
+mod1 simulation 150 iteration 1 completed.
+converged at iteration 1049 with logLik: -8680.541 
+mod2 simulation 150 iteration 1 completed.
+converged at iteration 3133 with logLik: -6131.936 
+mod1 simulation 151 iteration 1 completed.
+converged at iteration 269 with logLik: -8809.342 
+mod2 simulation 151 iteration 1 completed.
+converged at iteration 2112 with logLik: -6100.824 
+mod1 simulation 152 iteration 1 completed.
+converged at iteration 1324 with logLik: -8796.834 
+mod2 simulation 152 iteration 1 completed.
+converged at iteration 1383 with logLik: -5898.888 
+mod1 simulation 153 iteration 1 completed.
+converged at iteration 691 with logLik: -8669.268 
+mod2 simulation 153 iteration 1 completed.
+converged at iteration 2086 with logLik: -6053.048 
+mod1 simulation 154 iteration 1 completed.
+converged at iteration 419 with logLik: -8689.961 
+mod2 simulation 154 iteration 1 completed.
+converged at iteration 877 with logLik: -5950.176 
+mod1 simulation 155 iteration 1 completed.
+converged at iteration 485 with logLik: -8738.228 
+mod2 simulation 155 iteration 1 completed.
+converged at iteration 506 with logLik: -6065.724 
+mod1 simulation 156 iteration 1 completed.
+converged at iteration 325 with logLik: -8732.815 
+mod2 simulation 156 iteration 1 completed.
+converged at iteration 589 with logLik: -5842.178 
+mod1 simulation 157 iteration 1 completed.
+converged at iteration 249 with logLik: -8646.885 
+mod2 simulation 157 iteration 1 completed.
+converged at iteration 304 with logLik: -6093.847 
+mod1 simulation 158 iteration 1 completed.
+converged at iteration 709 with logLik: -8845.323 
+mod2 simulation 158 iteration 1 completed.
+converged at iteration 3045 with logLik: -5995.736 
+mod1 simulation 159 iteration 1 completed.
+converged at iteration 1942 with logLik: -8748.264 
+mod2 simulation 159 iteration 1 completed.
+converged at iteration 850 with logLik: -6131.011 
+mod1 simulation 160 iteration 1 completed.
+converged at iteration 440 with logLik: -8764.293 
+mod2 simulation 160 iteration 1 completed.
+converged at iteration 919 with logLik: -5973.573 
+mod1 simulation 161 iteration 1 completed.
+converged at iteration 268 with logLik: -8673.119 
+mod2 simulation 161 iteration 1 completed.
+converged at iteration 518 with logLik: -6135.147 
+mod1 simulation 162 iteration 1 completed.
+converged at iteration 1602 with logLik: -8736.853 
+mod2 simulation 162 iteration 1 completed.
+converged at iteration 363 with logLik: -6024.007 
+mod1 simulation 163 iteration 1 completed.
+converged at iteration 398 with logLik: -8723.843 
+mod2 simulation 163 iteration 1 completed.
+converged at iteration 1020 with logLik: -5931.182 
+mod1 simulation 164 iteration 1 completed.
+converged at iteration 2108 with logLik: -8681.134 
+mod2 simulation 164 iteration 1 completed.
+converged at iteration 1016 with logLik: -6022.131 
+mod1 simulation 165 iteration 1 completed.
+converged at iteration 993 with logLik: -8744.269 
+mod2 simulation 165 iteration 1 completed.
+converged at iteration 1342 with logLik: -6044.925 
+mod1 simulation 166 iteration 1 completed.
+converged at iteration 183 with logLik: -8738.62 
+mod2 simulation 166 iteration 1 completed.
+converged at iteration 538 with logLik: -6061.553 
+mod1 simulation 167 iteration 1 completed.
+converged at iteration 452 with logLik: -8812.853 
+mod2 simulation 167 iteration 1 completed.
+converged at iteration 1009 with logLik: -5931.327 
+mod1 simulation 168 iteration 1 completed.
+converged at iteration 487 with logLik: -8655.69 
+mod2 simulation 168 iteration 1 completed.
+converged at iteration 1055 with logLik: -6094.259 
+mod1 simulation 169 iteration 1 completed.
+converged at iteration 569 with logLik: -8830.155 
+mod2 simulation 169 iteration 1 completed.
+converged at iteration 1523 with logLik: -6161.043 
+mod1 simulation 170 iteration 1 completed.
+converged at iteration 370 with logLik: -8820.873 
+mod2 simulation 170 iteration 1 completed.
+converged at iteration 278 with logLik: -5981.712 
+mod1 simulation 171 iteration 1 completed.
+converged at iteration 100 with logLik: -8720.463 
+mod2 simulation 171 iteration 1 completed.
+converged at iteration 1687 with logLik: -6023.323 
+mod1 simulation 172 iteration 1 completed.
+converged at iteration 276 with logLik: -8760.807 
+mod2 simulation 172 iteration 1 completed.
+converged at iteration 751 with logLik: -5989.935 
+mod1 simulation 173 iteration 1 completed.
+converged at iteration 278 with logLik: -8704.142 
+mod2 simulation 173 iteration 1 completed.
+converged at iteration 670 with logLik: -6175.297 
+mod1 simulation 174 iteration 1 completed.
+converged at iteration 478 with logLik: -8862.039 
+mod2 simulation 174 iteration 1 completed.
+converged at iteration 417 with logLik: -6127.13 
+mod1 simulation 175 iteration 1 completed.
+converged at iteration 419 with logLik: -8773.916 
+mod2 simulation 175 iteration 1 completed.
+converged at iteration 108 with logLik: -6041.237 
+mod1 simulation 176 iteration 1 completed.
+converged at iteration 148 with logLik: -8786.112 
+mod2 simulation 176 iteration 1 completed.
+converged at iteration 1249 with logLik: -5984.171 
+mod1 simulation 177 iteration 1 completed.
+converged at iteration 539 with logLik: -8710.27 
+mod2 simulation 177 iteration 1 completed.
+converged at iteration 1210 with logLik: -6068.462 
+mod1 simulation 178 iteration 1 completed.
+converged at iteration 307 with logLik: -8771.684 
+mod2 simulation 178 iteration 1 completed.
+converged at iteration 671 with logLik: -6111.211 
+mod1 simulation 179 iteration 1 completed.
+converged at iteration 865 with logLik: -8830.491 
+mod2 simulation 179 iteration 1 completed.
+converged at iteration 575 with logLik: -6099.291 
+mod1 simulation 180 iteration 1 completed.
+converged at iteration 367 with logLik: -8776.163 
+mod2 simulation 180 iteration 1 completed.
+converged at iteration 486 with logLik: -6091.777 
+mod1 simulation 181 iteration 1 completed.
+converged at iteration 681 with logLik: -8817.848 
+mod2 simulation 181 iteration 1 completed.
+converged at iteration 236 with logLik: -5956.119 
+mod1 simulation 182 iteration 1 completed.
+converged at iteration 216 with logLik: -8735.984 
+mod2 simulation 182 iteration 1 completed.
+converged at iteration 679 with logLik: -6054.589 
+mod1 simulation 183 iteration 1 completed.
+converged at iteration 325 with logLik: -8751.076 
+mod2 simulation 183 iteration 1 completed.
+converged at iteration 432 with logLik: -6046.672 
+mod1 simulation 184 iteration 1 completed.
+converged at iteration 768 with logLik: -8753.196 
+mod2 simulation 184 iteration 1 completed.
+converged at iteration 617 with logLik: -5939.483 
+mod1 simulation 185 iteration 1 completed.
+converged at iteration 376 with logLik: -8650.24 
+mod2 simulation 185 iteration 1 completed.
+converged at iteration 581 with logLik: -5949.035 
+mod1 simulation 186 iteration 1 completed.
+converged at iteration 867 with logLik: -8642.216 
+mod2 simulation 186 iteration 1 completed.
+converged at iteration 600 with logLik: -6028.78 
+mod1 simulation 187 iteration 1 completed.
+converged at iteration 186 with logLik: -8747.383 
+mod2 simulation 187 iteration 1 completed.
+converged at iteration 869 with logLik: -6122.13 
+mod1 simulation 188 iteration 1 completed.
+converged at iteration 982 with logLik: -8806.632 
+mod2 simulation 188 iteration 1 completed.
+converged at iteration 388 with logLik: -6054.255 
+mod1 simulation 189 iteration 1 completed.
+converged at iteration 209 with logLik: -8808.863 
+mod2 simulation 189 iteration 1 completed.
+converged at iteration 574 with logLik: -6001.167 
+mod1 simulation 190 iteration 1 completed.
+converged at iteration 360 with logLik: -8696.078 
+mod2 simulation 190 iteration 1 completed.
+converged at iteration 446 with logLik: -6007.941 
+mod1 simulation 191 iteration 1 completed.
+converged at iteration 177 with logLik: -8709.404 
+mod2 simulation 191 iteration 1 completed.
+converged at iteration 1199 with logLik: -6126.71 
+mod1 simulation 192 iteration 1 completed.
+converged at iteration 397 with logLik: -8807.227 
+mod2 simulation 192 iteration 1 completed.
+converged at iteration 652 with logLik: -5962.227 
+mod1 simulation 193 iteration 1 completed.
+converged at iteration 415 with logLik: -8707.814 
+mod2 simulation 193 iteration 1 completed.
+converged at iteration 259 with logLik: -5931.92 
+mod1 simulation 194 iteration 1 completed.
+converged at iteration 659 with logLik: -8689.056 
+mod2 simulation 194 iteration 1 completed.
+converged at iteration 2112 with logLik: -5976.991 
+mod1 simulation 195 iteration 1 completed.
+converged at iteration 1004 with logLik: -8712.099 
+mod2 simulation 195 iteration 1 completed.
+converged at iteration 594 with logLik: -6063.996 
+mod1 simulation 196 iteration 1 completed.
+converged at iteration 228 with logLik: -8867.431 
+mod2 simulation 196 iteration 1 completed.
+converged at iteration 358 with logLik: -5910.596 
+mod1 simulation 197 iteration 1 completed.
+converged at iteration 258 with logLik: -8718.429 
+mod2 simulation 197 iteration 1 completed.
+converged at iteration 355 with logLik: -6134.756 
+mod1 simulation 198 iteration 1 completed.
+converged at iteration 106 with logLik: -8813.151 
+mod2 simulation 198 iteration 1 completed.
+converged at iteration 793 with logLik: -5967.932 
+mod1 simulation 199 iteration 1 completed.
+converged at iteration 582 with logLik: -8712.823 
+mod2 simulation 199 iteration 1 completed.
+converged at iteration 948 with logLik: -5997.161 
+mod1 simulation 200 iteration 1 completed.
+converged at iteration 443 with logLik: -8783.716 
+mod2 simulation 200 iteration 1 completed.
+converged at iteration 535 with logLik: -6002.27 
+mod1 simulation 201 iteration 1 completed.
+converged at iteration 335 with logLik: -8742.37 
+mod2 simulation 201 iteration 1 completed.
+converged at iteration 1532 with logLik: -6016.28 
+mod1 simulation 202 iteration 1 completed.
+converged at iteration 859 with logLik: -8759.456 
+mod2 simulation 202 iteration 1 completed.
+converged at iteration 514 with logLik: -5942.309 
+mod1 simulation 203 iteration 1 completed.
+converged at iteration 192 with logLik: -8720.15 
+mod2 simulation 203 iteration 1 completed.
+converged at iteration 575 with logLik: -6054.221 
+mod1 simulation 204 iteration 1 completed.
+converged at iteration 330 with logLik: -8785.863 
+mod2 simulation 204 iteration 1 completed.
+converged at iteration 724 with logLik: -5956.077 
+mod1 simulation 205 iteration 1 completed.
+converged at iteration 641 with logLik: -8737.838 
+mod2 simulation 205 iteration 1 completed.
+converged at iteration 655 with logLik: -6122.273 
+mod1 simulation 206 iteration 1 completed.
+converged at iteration 440 with logLik: -8705.102 
+mod2 simulation 206 iteration 1 completed.
+converged at iteration 898 with logLik: -6209.131 
+mod1 simulation 207 iteration 1 completed.
+converged at iteration 732 with logLik: -8844.636 
+mod2 simulation 207 iteration 1 completed.
+converged at iteration 1075 with logLik: -5973.265 
+mod1 simulation 208 iteration 1 completed.
+converged at iteration 736 with logLik: -8720.361 
+mod2 simulation 208 iteration 1 completed.
+converged at iteration 601 with logLik: -6065.375 
+mod1 simulation 209 iteration 1 completed.
+converged at iteration 468 with logLik: -8682.809 
+mod2 simulation 209 iteration 1 completed.
+converged at iteration 809 with logLik: -5986.263 
+mod1 simulation 210 iteration 1 completed.
+converged at iteration 862 with logLik: -8743.599 
+mod2 simulation 210 iteration 1 completed.
+converged at iteration 380 with logLik: -6128.745 
+mod1 simulation 211 iteration 1 completed.
+converged at iteration 301 with logLik: -8824.716 
+mod2 simulation 211 iteration 1 completed.
+converged at iteration 515 with logLik: -6050.071 
+mod1 simulation 212 iteration 1 completed.
+converged at iteration 733 with logLik: -8735.246 
+mod2 simulation 212 iteration 1 completed.
+converged at iteration 705 with logLik: -6024.186 
+mod1 simulation 213 iteration 1 completed.
+converged at iteration 386 with logLik: -8732.43 
+mod2 simulation 213 iteration 1 completed.
+converged at iteration 1629 with logLik: -5929.527 
+mod1 simulation 214 iteration 1 completed.
+converged at iteration 380 with logLik: -8754.012 
+mod2 simulation 214 iteration 1 completed.
+converged at iteration 1250 with logLik: -6100.811 
+mod1 simulation 215 iteration 1 completed.
+converged at iteration 653 with logLik: -8830.446 
+mod2 simulation 215 iteration 1 completed.
+converged at iteration 378 with logLik: -5852.329 
+mod1 simulation 216 iteration 1 completed.
+converged at iteration 922 with logLik: -8660.196 
+mod2 simulation 216 iteration 1 completed.
+converged at iteration 557 with logLik: -6018.944 
+mod1 simulation 217 iteration 1 completed.
+converged at iteration 277 with logLik: -8711.267 
+mod2 simulation 217 iteration 1 completed.
+converged at iteration 502 with logLik: -6111.749 
+mod1 simulation 218 iteration 1 completed.
+converged at iteration 312 with logLik: -8805.862 
+mod2 simulation 218 iteration 1 completed.
+converged at iteration 477 with logLik: -5972.502 
+mod1 simulation 219 iteration 1 completed.
+converged at iteration 295 with logLik: -8754.779 
+mod2 simulation 219 iteration 1 completed.
+converged at iteration 469 with logLik: -6053.613 
+mod1 simulation 220 iteration 1 completed.
+converged at iteration 367 with logLik: -8762.857 
+mod2 simulation 220 iteration 1 completed.
+converged at iteration 709 with logLik: -6067.454 
+mod1 simulation 221 iteration 1 completed.
+converged at iteration 634 with logLik: -8772.981 
+mod2 simulation 221 iteration 1 completed.
+converged at iteration 627 with logLik: -5981.516 
+mod1 simulation 222 iteration 1 completed.
+converged at iteration 1270 with logLik: -8707.58 
+mod2 simulation 222 iteration 1 completed.
+converged at iteration 1615 with logLik: -6003.964 
+mod1 simulation 223 iteration 1 completed.
+converged at iteration 657 with logLik: -8726.177 
+mod2 simulation 223 iteration 1 completed.
+converged at iteration 627 with logLik: -6048.751 
+mod1 simulation 224 iteration 1 completed.
+converged at iteration 239 with logLik: -8746.187 
+mod2 simulation 224 iteration 1 completed.
+converged at iteration 762 with logLik: -6008.262 
+mod1 simulation 225 iteration 1 completed.
+converged at iteration 379 with logLik: -8707.501 
+mod2 simulation 225 iteration 1 completed.
+converged at iteration 436 with logLik: -6081.632 
+mod1 simulation 226 iteration 1 completed.
+converged at iteration 216 with logLik: -8754.95 
+mod2 simulation 226 iteration 1 completed.
+converged at iteration 265 with logLik: -6029.197 
+mod1 simulation 227 iteration 1 completed.
+converged at iteration 315 with logLik: -8735.304 
+mod2 simulation 227 iteration 1 completed.
+converged at iteration 846 with logLik: -5994.876 
+mod1 simulation 228 iteration 1 completed.
+converged at iteration 442 with logLik: -8756.416 
+mod2 simulation 228 iteration 1 completed.
+converged at iteration 554 with logLik: -6120.338 
+mod1 simulation 229 iteration 1 completed.
+converged at iteration 424 with logLik: -8759.756 
+mod2 simulation 229 iteration 1 completed.
+converged at iteration 2867 with logLik: -5987.039 
+mod1 simulation 230 iteration 1 completed.
+converged at iteration 249 with logLik: -8756.379 
+mod2 simulation 230 iteration 1 completed.
+converged at iteration 648 with logLik: -6035.584 
+mod1 simulation 231 iteration 1 completed.
+converged at iteration 267 with logLik: -8740.888 
+mod2 simulation 231 iteration 1 completed.
+converged at iteration 395 with logLik: -5967.134 
+mod1 simulation 232 iteration 1 completed.
+converged at iteration 300 with logLik: -8694.284 
+mod2 simulation 232 iteration 1 completed.
+converged at iteration 2519 with logLik: -5914.503 
+mod1 simulation 233 iteration 1 completed.
+converged at iteration 735 with logLik: -8674.746 
+mod2 simulation 233 iteration 1 completed.
+converged at iteration 847 with logLik: -6083.989 
+mod1 simulation 234 iteration 1 completed.
+converged at iteration 966 with logLik: -8756.053 
+mod2 simulation 234 iteration 1 completed.
+converged at iteration 587 with logLik: -5927.314 
+mod1 simulation 235 iteration 1 completed.
+converged at iteration 685 with logLik: -8717.901 
+mod2 simulation 235 iteration 1 completed.
+converged at iteration 831 with logLik: -5888.296 
+mod1 simulation 236 iteration 1 completed.
+converged at iteration 597 with logLik: -8686.064 
+mod2 simulation 236 iteration 1 completed.
+converged at iteration 932 with logLik: -6019.087 
+mod1 simulation 237 iteration 1 completed.
+converged at iteration 392 with logLik: -8718.737 
+mod2 simulation 237 iteration 1 completed.
+converged at iteration 628 with logLik: -6131.01 
+mod1 simulation 238 iteration 1 completed.
+converged at iteration 424 with logLik: -8809.086 
+mod2 simulation 238 iteration 1 completed.
+converged at iteration 2442 with logLik: -5925.736 
+mod1 simulation 239 iteration 1 completed.
+converged at iteration 2464 with logLik: -8681.736 
+mod2 simulation 239 iteration 1 completed.
+converged at iteration 837 with logLik: -5965.125 
+mod1 simulation 240 iteration 1 completed.
+converged at iteration 415 with logLik: -8712.892 
+mod2 simulation 240 iteration 1 completed.
+converged at iteration 270 with logLik: -6026.797 
+mod1 simulation 241 iteration 1 completed.
+converged at iteration 160 with logLik: -8760.676 
+mod2 simulation 241 iteration 1 completed.
+converged at iteration 341 with logLik: -5959.558 
+mod1 simulation 242 iteration 1 completed.
+converged at iteration 636 with logLik: -8690.871 
+mod2 simulation 242 iteration 1 completed.
+converged at iteration 1111 with logLik: -5979.499 
+mod1 simulation 243 iteration 1 completed.
+converged at iteration 333 with logLik: -8713.008 
+mod2 simulation 243 iteration 1 completed.
+converged at iteration 562 with logLik: -6040.026 
+mod1 simulation 244 iteration 1 completed.
+converged at iteration 402 with logLik: -8781.526 
+mod2 simulation 244 iteration 1 completed.
+converged at iteration 780 with logLik: -6000.481 
+mod1 simulation 245 iteration 1 completed.
+converged at iteration 713 with logLik: -8719.933 
+mod2 simulation 245 iteration 1 completed.
+converged at iteration 258 with logLik: -5980.654 
+mod1 simulation 246 iteration 1 completed.
+converged at iteration 207 with logLik: -8703.815 
+mod2 simulation 246 iteration 1 completed.
+converged at iteration 1091 with logLik: -6011.191 
+mod1 simulation 247 iteration 1 completed.
+converged at iteration 739 with logLik: -8734.953 
+mod2 simulation 247 iteration 1 completed.
+converged at iteration 1716 with logLik: -5989.637 
+mod1 simulation 248 iteration 1 completed.
+converged at iteration 287 with logLik: -8759.975 
+mod2 simulation 248 iteration 1 completed.
+converged at iteration 703 with logLik: -5984.739 
+mod1 simulation 249 iteration 1 completed.
+converged at iteration 726 with logLik: -8691.826 
+mod2 simulation 249 iteration 1 completed.
+converged at iteration 1240 with logLik: -5952.341 
+mod1 simulation 250 iteration 1 completed.
+converged at iteration 955 with logLik: -8759.3 
+mod2 simulation 250 iteration 1 completed.
+converged at iteration 566 with logLik: -6049.053 
+mod1 simulation 251 iteration 1 completed.
+converged at iteration 614 with logLik: -8781.254 
+mod2 simulation 251 iteration 1 completed.
+converged at iteration 275 with logLik: -6092.929 
+mod1 simulation 252 iteration 1 completed.
+converged at iteration 276 with logLik: -8770.647 
+mod2 simulation 252 iteration 1 completed.
+converged at iteration 1029 with logLik: -6095.606 
+mod1 simulation 253 iteration 1 completed.
+converged at iteration 1731 with logLik: -8757.9 
+mod2 simulation 253 iteration 1 completed.
+converged at iteration 715 with logLik: -6058.568 
+mod1 simulation 254 iteration 1 completed.
+converged at iteration 439 with logLik: -8745.225 
+mod2 simulation 254 iteration 1 completed.
+converged at iteration 483 with logLik: -5963.249 
+mod1 simulation 255 iteration 1 completed.
+converged at iteration 528 with logLik: -8748.814 
+mod2 simulation 255 iteration 1 completed.
+converged at iteration 2572 with logLik: -6067.388 
+mod1 simulation 256 iteration 1 completed.
+converged at iteration 1405 with logLik: -8778.185 
+mod2 simulation 256 iteration 1 completed.
+converged at iteration 634 with logLik: -6054.946 
+mod1 simulation 257 iteration 1 completed.
+converged at iteration 531 with logLik: -8754.37 
+mod2 simulation 257 iteration 1 completed.
+converged at iteration 1763 with logLik: -5917.956 
+mod1 simulation 258 iteration 1 completed.
+converged at iteration 392 with logLik: -8662.678 
+mod2 simulation 258 iteration 1 completed.
+converged at iteration 411 with logLik: -6068.841 
+mod1 simulation 259 iteration 1 completed.
+converged at iteration 490 with logLik: -8761.142 
+mod2 simulation 259 iteration 1 completed.
+converged at iteration 618 with logLik: -5961.6 
+mod1 simulation 260 iteration 1 completed.
+converged at iteration 715 with logLik: -8676.711 
+mod2 simulation 260 iteration 1 completed.
+converged at iteration 584 with logLik: -6068.629 
+mod1 simulation 261 iteration 1 completed.
+converged at iteration 282 with logLik: -8772.396 
+mod2 simulation 261 iteration 1 completed.
+converged at iteration 498 with logLik: -6144.346 
+mod1 simulation 262 iteration 1 completed.
+converged at iteration 469 with logLik: -8803.57 
+mod2 simulation 262 iteration 1 completed.
+converged at iteration 750 with logLik: -5863.768 
+mod1 simulation 263 iteration 1 completed.
+converged at iteration 570 with logLik: -8679.065 
+mod2 simulation 263 iteration 1 completed.
+converged at iteration 326 with logLik: -5881.736 
+mod1 simulation 264 iteration 1 completed.
+converged at iteration 397 with logLik: -8629.664 
+mod2 simulation 264 iteration 1 completed.
+converged at iteration 180 with logLik: -6017.311 
+mod1 simulation 265 iteration 1 completed.
+converged at iteration 509 with logLik: -8695.934 
+mod2 simulation 265 iteration 1 completed.
+converged at iteration 611 with logLik: -6066.553 
+mod1 simulation 266 iteration 1 completed.
+converged at iteration 351 with logLik: -8768.835 
+mod2 simulation 266 iteration 1 completed.
+converged at iteration 492 with logLik: -6062.841 
+mod1 simulation 267 iteration 1 completed.
+converged at iteration 481 with logLik: -8824.618 
+mod2 simulation 267 iteration 1 completed.
+converged at iteration 173 with logLik: -6026.568 
+mod1 simulation 268 iteration 1 completed.
+converged at iteration 259 with logLik: -8759.094 
+mod2 simulation 268 iteration 1 completed.
+converged at iteration 820 with logLik: -5982.237 
+mod1 simulation 269 iteration 1 completed.
+converged at iteration 357 with logLik: -8732.429 
+mod2 simulation 269 iteration 1 completed.
+converged at iteration 691 with logLik: -5987.343 
+mod1 simulation 270 iteration 1 completed.
+converged at iteration 528 with logLik: -8715.335 
+mod2 simulation 270 iteration 1 completed.
+converged at iteration 1174 with logLik: -6115.068 
+mod1 simulation 271 iteration 1 completed.
+converged at iteration 1659 with logLik: -8789.625 
+mod2 simulation 271 iteration 1 completed.
+converged at iteration 1660 with logLik: -6096.699 
+mod1 simulation 272 iteration 1 completed.
+converged at iteration 1079 with logLik: -8778.654 
+mod2 simulation 272 iteration 1 completed.
+converged at iteration 704 with logLik: -6064.032 
+mod1 simulation 273 iteration 1 completed.
+converged at iteration 1145 with logLik: -8755.018 
+mod2 simulation 273 iteration 1 completed.
+converged at iteration 864 with logLik: -6184.247 
+mod1 simulation 274 iteration 1 completed.
+converged at iteration 733 with logLik: -8859.103 
+mod2 simulation 274 iteration 1 completed.
+converged at iteration 1011 with logLik: -6043.877 
+mod1 simulation 275 iteration 1 completed.
+converged at iteration 282 with logLik: -8775.949 
+mod2 simulation 275 iteration 1 completed.
+converged at iteration 820 with logLik: -5949.103 
+mod1 simulation 276 iteration 1 completed.
+converged at iteration 794 with logLik: -8700.644 
+mod2 simulation 276 iteration 1 completed.
+converged at iteration 489 with logLik: -5970.91 
+mod1 simulation 277 iteration 1 completed.
+converged at iteration 669 with logLik: -8712.168 
+mod2 simulation 277 iteration 1 completed.
+converged at iteration 577 with logLik: -5952.853 
+mod1 simulation 278 iteration 1 completed.
+converged at iteration 569 with logLik: -8698.476 
+mod2 simulation 278 iteration 1 completed.
+converged at iteration 363 with logLik: -6079.076 
+mod1 simulation 279 iteration 1 completed.
+converged at iteration 274 with logLik: -8776.908 
+mod2 simulation 279 iteration 1 completed.
+converged at iteration 380 with logLik: -6087.571 
+mod1 simulation 280 iteration 1 completed.
+converged at iteration 401 with logLik: -8769.861 
+mod2 simulation 280 iteration 1 completed.
+converged at iteration 507 with logLik: -6047.998 
+mod1 simulation 281 iteration 1 completed.
+converged at iteration 322 with logLik: -8750.987 
+mod2 simulation 281 iteration 1 completed.
+converged at iteration 570 with logLik: -6002.357 
+mod1 simulation 282 iteration 1 completed.
+converged at iteration 375 with logLik: -8698.545 
+mod2 simulation 282 iteration 1 completed.
+converged at iteration 300 with logLik: -6046.148 
+mod1 simulation 283 iteration 1 completed.
+converged at iteration 369 with logLik: -8739.355 
+mod2 simulation 283 iteration 1 completed.
+converged at iteration 712 with logLik: -5989.763 
+mod1 simulation 284 iteration 1 completed.
+converged at iteration 585 with logLik: -8717.567 
+mod2 simulation 284 iteration 1 completed.
+converged at iteration 556 with logLik: -6087.624 
+mod1 simulation 285 iteration 1 completed.
+converged at iteration 593 with logLik: -8734.983 
+mod2 simulation 285 iteration 1 completed.
+converged at iteration 715 with logLik: -5990.445 
+mod1 simulation 286 iteration 1 completed.
+converged at iteration 548 with logLik: -8682.889 
+mod2 simulation 286 iteration 1 completed.
+converged at iteration 533 with logLik: -5970.351 
+mod1 simulation 287 iteration 1 completed.
+converged at iteration 597 with logLik: -8711.787 
+mod2 simulation 287 iteration 1 completed.
+converged at iteration 501 with logLik: -6085.961 
+mod1 simulation 288 iteration 1 completed.
+converged at iteration 425 with logLik: -8760.557 
+mod2 simulation 288 iteration 1 completed.
+converged at iteration 839 with logLik: -5939.045 
+mod1 simulation 289 iteration 1 completed.
+converged at iteration 1006 with logLik: -8684.739 
+mod2 simulation 289 iteration 1 completed.
+converged at iteration 701 with logLik: -6079.384 
+mod1 simulation 290 iteration 1 completed.
+converged at iteration 414 with logLik: -8840.622 
+mod2 simulation 290 iteration 1 completed.
+converged at iteration 283 with logLik: -5942.343 
+mod1 simulation 291 iteration 1 completed.
+converged at iteration 227 with logLik: -8698.604 
+mod2 simulation 291 iteration 1 completed.
+converged at iteration 751 with logLik: -6084.72 
+mod1 simulation 292 iteration 1 completed.
+converged at iteration 1276 with logLik: -8825.746 
+mod2 simulation 292 iteration 1 completed.
+converged at iteration 630 with logLik: -5991.015 
+mod1 simulation 293 iteration 1 completed.
+converged at iteration 470 with logLik: -8695.534 
+mod2 simulation 293 iteration 1 completed.
+converged at iteration 855 with logLik: -5991.009 
+mod1 simulation 294 iteration 1 completed.
+converged at iteration 768 with logLik: -8738.911 
+mod2 simulation 294 iteration 1 completed.
+converged at iteration 649 with logLik: -5870.963 
+mod1 simulation 295 iteration 1 completed.
+converged at iteration 364 with logLik: -8642.813 
+mod2 simulation 295 iteration 1 completed.
+converged at iteration 804 with logLik: -6078.421 
+mod1 simulation 296 iteration 1 completed.
+converged at iteration 381 with logLik: -8770.259 
+mod2 simulation 296 iteration 1 completed.
+converged at iteration 230 with logLik: -6070.194 
+mod1 simulation 297 iteration 1 completed.
+converged at iteration 192 with logLik: -8793.754 
+mod2 simulation 297 iteration 1 completed.
+converged at iteration 466 with logLik: -6007.165 
+mod1 simulation 298 iteration 1 completed.
+converged at iteration 444 with logLik: -8750.198 
+mod2 simulation 298 iteration 1 completed.
+converged at iteration 437 with logLik: -6084.76 
+mod1 simulation 299 iteration 1 completed.
+converged at iteration 275 with logLik: -8808.271 
+mod2 simulation 299 iteration 1 completed.
+converged at iteration 472 with logLik: -6127.022 
+mod1 simulation 300 iteration 1 completed.
+converged at iteration 638 with logLik: -8772.83 
+mod2 simulation 300 iteration 1 completed.
+converged at iteration 493 with logLik: -6007.861 
+mod1 simulation 301 iteration 1 completed.
+converged at iteration 484 with logLik: -8764.54 
+mod2 simulation 301 iteration 1 completed.
+converged at iteration 583 with logLik: -6098.685 
+mod1 simulation 302 iteration 1 completed.
+converged at iteration 395 with logLik: -8822.065 
+mod2 simulation 302 iteration 1 completed.
+converged at iteration 748 with logLik: -5922.279 
+mod1 simulation 303 iteration 1 completed.
+converged at iteration 251 with logLik: -8708.485 
+mod2 simulation 303 iteration 1 completed.
+converged at iteration 651 with logLik: -6115.947 
+mod1 simulation 304 iteration 1 completed.
+converged at iteration 514 with logLik: -8804.402 
+mod2 simulation 304 iteration 1 completed.
+converged at iteration 516 with logLik: -5961.061 
+mod1 simulation 305 iteration 1 completed.
+converged at iteration 256 with logLik: -8652.176 
+mod2 simulation 305 iteration 1 completed.
+converged at iteration 711 with logLik: -5920.017 
+mod1 simulation 306 iteration 1 completed.
+converged at iteration 280 with logLik: -8666.662 
+mod2 simulation 306 iteration 1 completed.
+converged at iteration 2007 with logLik: -6061.97 
+mod1 simulation 307 iteration 1 completed.
+converged at iteration 342 with logLik: -8753.675 
+mod2 simulation 307 iteration 1 completed.
+converged at iteration 1210 with logLik: -6010.091 
+mod1 simulation 308 iteration 1 completed.
+converged at iteration 691 with logLik: -8716.898 
+mod2 simulation 308 iteration 1 completed.
+converged at iteration 1923 with logLik: -5970.342 
+mod1 simulation 309 iteration 1 completed.
+converged at iteration 273 with logLik: -8677.541 
+mod2 simulation 309 iteration 1 completed.
+converged at iteration 375 with logLik: -5993.944 
+mod1 simulation 310 iteration 1 completed.
+converged at iteration 325 with logLik: -8753.643 
+mod2 simulation 310 iteration 1 completed.
+converged at iteration 539 with logLik: -5934.926 
+mod1 simulation 311 iteration 1 completed.
+converged at iteration 214 with logLik: -8704.994 
+mod2 simulation 311 iteration 1 completed.
+converged at iteration 470 with logLik: -6064.571 
+mod1 simulation 312 iteration 1 completed.
+converged at iteration 1005 with logLik: -8834.735 
+mod2 simulation 312 iteration 1 completed.
+converged at iteration 1125 with logLik: -6093.785 
+mod1 simulation 313 iteration 1 completed.
+converged at iteration 551 with logLik: -8804.453 
+mod2 simulation 313 iteration 1 completed.
+converged at iteration 415 with logLik: -5991.261 
+mod1 simulation 314 iteration 1 completed.
+converged at iteration 280 with logLik: -8701.875 
+mod2 simulation 314 iteration 1 completed.
+converged at iteration 557 with logLik: -5826.122 
+mod1 simulation 315 iteration 1 completed.
+converged at iteration 636 with logLik: -8625.345 
+mod2 simulation 315 iteration 1 completed.
+converged at iteration 2152 with logLik: -5931.969 
+mod1 simulation 316 iteration 1 completed.
+converged at iteration 469 with logLik: -8720.2 
+mod2 simulation 316 iteration 1 completed.
+converged at iteration 462 with logLik: -5895.717 
+mod1 simulation 317 iteration 1 completed.
+converged at iteration 615 with logLik: -8674.596 
+mod2 simulation 317 iteration 1 completed.
+converged at iteration 666 with logLik: -5996.259 
+mod1 simulation 318 iteration 1 completed.
+converged at iteration 198 with logLik: -8744.828 
+mod2 simulation 318 iteration 1 completed.
+converged at iteration 351 with logLik: -5923.696 
+mod1 simulation 319 iteration 1 completed.
+converged at iteration 755 with logLik: -8717.603 
+mod2 simulation 319 iteration 1 completed.
+converged at iteration 1412 with logLik: -6077.125 
+mod1 simulation 320 iteration 1 completed.
+converged at iteration 626 with logLik: -8783.628 
+mod2 simulation 320 iteration 1 completed.
+converged at iteration 217 with logLik: -5908.551 
+mod1 simulation 321 iteration 1 completed.
+converged at iteration 143 with logLik: -8628.471 
+mod2 simulation 321 iteration 1 completed.
+converged at iteration 549 with logLik: -6036.941 
+mod1 simulation 322 iteration 1 completed.
+converged at iteration 226 with logLik: -8771.226 
+mod2 simulation 322 iteration 1 completed.
+converged at iteration 1850 with logLik: -6043.674 
+mod1 simulation 323 iteration 1 completed.
+converged at iteration 528 with logLik: -8737.252 
+mod2 simulation 323 iteration 1 completed.
+converged at iteration 152 with logLik: -5936.25 
+mod1 simulation 324 iteration 1 completed.
+converged at iteration 310 with logLik: -8708.907 
+mod2 simulation 324 iteration 1 completed.
+converged at iteration 339 with logLik: -6023.747 
+mod1 simulation 325 iteration 1 completed.
+converged at iteration 727 with logLik: -8756.431 
+mod2 simulation 325 iteration 1 completed.
+converged at iteration 1705 with logLik: -6015.357 
+mod1 simulation 326 iteration 1 completed.
+converged at iteration 535 with logLik: -8785.74 
+mod2 simulation 326 iteration 1 completed.
+converged at iteration 1356 with logLik: -6124.172 
+mod1 simulation 327 iteration 1 completed.
+converged at iteration 634 with logLik: -8813.527 
+mod2 simulation 327 iteration 1 completed.
+converged at iteration 517 with logLik: -5981.809 
+mod1 simulation 328 iteration 1 completed.
+converged at iteration 539 with logLik: -8709.672 
+mod2 simulation 328 iteration 1 completed.
+converged at iteration 595 with logLik: -5946.63 
+mod1 simulation 329 iteration 1 completed.
+converged at iteration 293 with logLik: -8681.599 
+mod2 simulation 329 iteration 1 completed.
+converged at iteration 415 with logLik: -5986.62 
+mod1 simulation 330 iteration 1 completed.
+converged at iteration 402 with logLik: -8719.424 
+mod2 simulation 330 iteration 1 completed.
+converged at iteration 475 with logLik: -6090.628 
+mod1 simulation 331 iteration 1 completed.
+converged at iteration 483 with logLik: -8810.798 
+mod2 simulation 331 iteration 1 completed.
+converged at iteration 957 with logLik: -6022.597 
+mod1 simulation 332 iteration 1 completed.
+converged at iteration 395 with logLik: -8706.896 
+mod2 simulation 332 iteration 1 completed.
+converged at iteration 533 with logLik: -6088.379 
+mod1 simulation 333 iteration 1 completed.
+converged at iteration 256 with logLik: -8810.178 
+mod2 simulation 333 iteration 1 completed.
+converged at iteration 780 with logLik: -6025.391 
+mod1 simulation 334 iteration 1 completed.
+converged at iteration 894 with logLik: -8770.742 
+mod2 simulation 334 iteration 1 completed.
+converged at iteration 655 with logLik: -5896.28 
+mod1 simulation 335 iteration 1 completed.
+converged at iteration 720 with logLik: -8643.952 
+mod2 simulation 335 iteration 1 completed.
+converged at iteration 242 with logLik: -6041.856 
+mod1 simulation 336 iteration 1 completed.
+converged at iteration 220 with logLik: -8754.514 
+mod2 simulation 336 iteration 1 completed.
+converged at iteration 1091 with logLik: -6007.228 
+mod1 simulation 337 iteration 1 completed.
+converged at iteration 315 with logLik: -8723.25 
+mod2 simulation 337 iteration 1 completed.
+converged at iteration 297 with logLik: -5983.146 
+mod1 simulation 338 iteration 1 completed.
+converged at iteration 578 with logLik: -8726.786 
+mod2 simulation 338 iteration 1 completed.
+converged at iteration 527 with logLik: -6018.403 
+mod1 simulation 339 iteration 1 completed.
+converged at iteration 392 with logLik: -8711.86 
+mod2 simulation 339 iteration 1 completed.
+converged at iteration 718 with logLik: -6065.2 
+mod1 simulation 340 iteration 1 completed.
+converged at iteration 421 with logLik: -8759.035 
+mod2 simulation 340 iteration 1 completed.
+converged at iteration 830 with logLik: -5915.88 
+mod1 simulation 341 iteration 1 completed.
+converged at iteration 444 with logLik: -8665.445 
+mod2 simulation 341 iteration 1 completed.
+converged at iteration 1383 with logLik: -5943.354 
+mod1 simulation 342 iteration 1 completed.
+converged at iteration 502 with logLik: -8678.966 
+mod2 simulation 342 iteration 1 completed.
+converged at iteration 936 with logLik: -6021.431 
+mod1 simulation 343 iteration 1 completed.
+converged at iteration 140 with logLik: -8741.546 
+mod2 simulation 343 iteration 1 completed.
+converged at iteration 511 with logLik: -5985.156 
+mod1 simulation 344 iteration 1 completed.
+converged at iteration 324 with logLik: -8737.924 
+mod2 simulation 344 iteration 1 completed.
+converged at iteration 585 with logLik: -5946.273 
+mod1 simulation 345 iteration 1 completed.
+converged at iteration 615 with logLik: -8747.408 
+mod2 simulation 345 iteration 1 completed.
+converged at iteration 336 with logLik: -6044.365 
+mod1 simulation 346 iteration 1 completed.
+converged at iteration 900 with logLik: -8784.265 
+mod2 simulation 346 iteration 1 completed.
+converged at iteration 600 with logLik: -6057.32 
+mod1 simulation 347 iteration 1 completed.
+converged at iteration 1073 with logLik: -8776.136 
+mod2 simulation 347 iteration 1 completed.
+converged at iteration 263 with logLik: -6010.848 
+mod1 simulation 348 iteration 1 completed.
+converged at iteration 220 with logLik: -8739.404 
+mod2 simulation 348 iteration 1 completed.
+converged at iteration 538 with logLik: -5961.8 
+mod1 simulation 349 iteration 1 completed.
+converged at iteration 778 with logLik: -8755.426 
+mod2 simulation 349 iteration 1 completed.
+converged at iteration 312 with logLik: -5988.949 
+mod1 simulation 350 iteration 1 completed.
+converged at iteration 152 with logLik: -8667.235 
+mod2 simulation 350 iteration 1 completed.
+converged at iteration 465 with logLik: -6027.232 
+mod1 simulation 351 iteration 1 completed.
+converged at iteration 1101 with logLik: -8776.2 
+mod2 simulation 351 iteration 1 completed.
+converged at iteration 512 with logLik: -6089.117 
+mod1 simulation 352 iteration 1 completed.
+converged at iteration 1751 with logLik: -8775.495 
+mod2 simulation 352 iteration 1 completed.
+converged at iteration 475 with logLik: -5970.566 
+mod1 simulation 353 iteration 1 completed.
+converged at iteration 330 with logLik: -8687.558 
+mod2 simulation 353 iteration 1 completed.
+converged at iteration 1369 with logLik: -6190.528 
+mod1 simulation 354 iteration 1 completed.
+converged at iteration 1745 with logLik: -8810.036 
+mod2 simulation 354 iteration 1 completed.
+converged at iteration 848 with logLik: -6022.612 
+mod1 simulation 355 iteration 1 completed.
+converged at iteration 455 with logLik: -8763.705 
+mod2 simulation 355 iteration 1 completed.
+converged at iteration 564 with logLik: -5972.064 
+mod1 simulation 356 iteration 1 completed.
+converged at iteration 204 with logLik: -8731.665 
+mod2 simulation 356 iteration 1 completed.
+converged at iteration 553 with logLik: -6104.579 
+mod1 simulation 357 iteration 1 completed.
+converged at iteration 453 with logLik: -8763.149 
+mod2 simulation 357 iteration 1 completed.
+converged at iteration 825 with logLik: -6106.649 
+mod1 simulation 358 iteration 1 completed.
+converged at iteration 645 with logLik: -8758.415 
+mod2 simulation 358 iteration 1 completed.
+converged at iteration 568 with logLik: -6002.442 
+mod1 simulation 359 iteration 1 completed.
+converged at iteration 223 with logLik: -8740.378 
+mod2 simulation 359 iteration 1 completed.
+converged at iteration 296 with logLik: -6089.083 
+mod1 simulation 360 iteration 1 completed.
+converged at iteration 274 with logLik: -8769.985 
+mod2 simulation 360 iteration 1 completed.
+converged at iteration 796 with logLik: -5951.414 
+mod1 simulation 361 iteration 1 completed.
+converged at iteration 340 with logLik: -8670.659 
+mod2 simulation 361 iteration 1 completed.
+converged at iteration 1508 with logLik: -5987.027 
+mod1 simulation 362 iteration 1 completed.
+converged at iteration 274 with logLik: -8701.285 
+mod2 simulation 362 iteration 1 completed.
+converged at iteration 1216 with logLik: -6153.669 
+mod1 simulation 363 iteration 1 completed.
+converged at iteration 889 with logLik: -8831.12 
+mod2 simulation 363 iteration 1 completed.
+converged at iteration 337 with logLik: -6167.114 
+mod1 simulation 364 iteration 1 completed.
+converged at iteration 226 with logLik: -8772.941 
+mod2 simulation 364 iteration 1 completed.
+converged at iteration 449 with logLik: -6022.059 
+mod1 simulation 365 iteration 1 completed.
+converged at iteration 168 with logLik: -8761.942 
+mod2 simulation 365 iteration 1 completed.
+converged at iteration 714 with logLik: -5995.588 
+mod1 simulation 366 iteration 1 completed.
+converged at iteration 1054 with logLik: -8694.196 
+mod2 simulation 366 iteration 1 completed.
+converged at iteration 712 with logLik: -6003.881 
+mod1 simulation 367 iteration 1 completed.
+converged at iteration 741 with logLik: -8726.81 
+mod2 simulation 367 iteration 1 completed.
+converged at iteration 2009 with logLik: -6019.927 
+mod1 simulation 368 iteration 1 completed.
+converged at iteration 499 with logLik: -8692.621 
+mod2 simulation 368 iteration 1 completed.
+converged at iteration 949 with logLik: -6109.803 
+mod1 simulation 369 iteration 1 completed.
+converged at iteration 533 with logLik: -8756.638 
+mod2 simulation 369 iteration 1 completed.
+converged at iteration 1041 with logLik: -6045.103 
+mod1 simulation 370 iteration 1 completed.
+converged at iteration 1514 with logLik: -8742.847 
+mod2 simulation 370 iteration 1 completed.
+converged at iteration 1426 with logLik: -5965.755 
+mod1 simulation 371 iteration 1 completed.
+converged at iteration 387 with logLik: -8720.47 
+mod2 simulation 371 iteration 1 completed.
+converged at iteration 338 with logLik: -5972.883 
+mod1 simulation 372 iteration 1 completed.
+converged at iteration 1345 with logLik: -8705.543 
+mod2 simulation 372 iteration 1 completed.
+converged at iteration 722 with logLik: -5986.723 
+mod1 simulation 373 iteration 1 completed.
+converged at iteration 765 with logLik: -8742.532 
+mod2 simulation 373 iteration 1 completed.
+converged at iteration 1347 with logLik: -5983.899 
+mod1 simulation 374 iteration 1 completed.
+converged at iteration 604 with logLik: -8718.126 
+mod2 simulation 374 iteration 1 completed.
+converged at iteration 968 with logLik: -6064.594 
+mod1 simulation 375 iteration 1 completed.
+converged at iteration 428 with logLik: -8774.897 
+mod2 simulation 375 iteration 1 completed.
+converged at iteration 239 with logLik: -5879.067 
+mod1 simulation 376 iteration 1 completed.
+converged at iteration 170 with logLik: -8632.146 
+mod2 simulation 376 iteration 1 completed.
+converged at iteration 635 with logLik: -6142.812 
+mod1 simulation 377 iteration 1 completed.
+converged at iteration 1725 with logLik: -8825.654 
+mod2 simulation 377 iteration 1 completed.
+converged at iteration 601 with logLik: -6024.909 
+mod1 simulation 378 iteration 1 completed.
+converged at iteration 439 with logLik: -8783.813 
+mod2 simulation 378 iteration 1 completed.
+converged at iteration 2035 with logLik: -5929.377 
+mod1 simulation 379 iteration 1 completed.
+converged at iteration 1104 with logLik: -8658.727 
+mod2 simulation 379 iteration 1 completed.
+converged at iteration 598 with logLik: -6030.175 
+mod1 simulation 380 iteration 1 completed.
+converged at iteration 1039 with logLik: -8814.3 
+mod2 simulation 380 iteration 1 completed.
+converged at iteration 427 with logLik: -5928.208 
+mod1 simulation 381 iteration 1 completed.
+converged at iteration 418 with logLik: -8692.303 
+mod2 simulation 381 iteration 1 completed.
+converged at iteration 1679 with logLik: -6100.375 
+mod1 simulation 382 iteration 1 completed.
+converged at iteration 285 with logLik: -8821.501 
+mod2 simulation 382 iteration 1 completed.
+converged at iteration 539 with logLik: -5896.326 
+mod1 simulation 383 iteration 1 completed.
+converged at iteration 828 with logLik: -8695.293 
+mod2 simulation 383 iteration 1 completed.
+converged at iteration 1016 with logLik: -6059.634 
+mod1 simulation 384 iteration 1 completed.
+converged at iteration 397 with logLik: -8737.821 
+mod2 simulation 384 iteration 1 completed.
+converged at iteration 1055 with logLik: -6024.372 
+mod1 simulation 385 iteration 1 completed.
+converged at iteration 236 with logLik: -8753.542 
+mod2 simulation 385 iteration 1 completed.
+converged at iteration 465 with logLik: -6081.917 
+mod1 simulation 386 iteration 1 completed.
+converged at iteration 280 with logLik: -8762.357 
+mod2 simulation 386 iteration 1 completed.
+converged at iteration 959 with logLik: -6065.785 
+mod1 simulation 387 iteration 1 completed.
+converged at iteration 314 with logLik: -8769.571 
+mod2 simulation 387 iteration 1 completed.
+converged at iteration 455 with logLik: -6064.611 
+mod1 simulation 388 iteration 1 completed.
+converged at iteration 647 with logLik: -8764.55 
+mod2 simulation 388 iteration 1 completed.
+converged at iteration 501 with logLik: -6027.292 
+mod1 simulation 389 iteration 1 completed.
+converged at iteration 953 with logLik: -8737.08 
+mod2 simulation 389 iteration 1 completed.
+converged at iteration 1148 with logLik: -6021.242 
+mod1 simulation 390 iteration 1 completed.
+converged at iteration 397 with logLik: -8722.392 
+mod2 simulation 390 iteration 1 completed.
+converged at iteration 955 with logLik: -5956.147 
+mod1 simulation 391 iteration 1 completed.
+converged at iteration 850 with logLik: -8731.476 
+mod2 simulation 391 iteration 1 completed.
+converged at iteration 525 with logLik: -6276.646 
+mod1 simulation 392 iteration 1 completed.
+converged at iteration 233 with logLik: -8842.615 
+mod2 simulation 392 iteration 1 completed.
+converged at iteration 446 with logLik: -5960.675 
+mod1 simulation 393 iteration 1 completed.
+converged at iteration 88 with logLik: -8729.129 
+mod2 simulation 393 iteration 1 completed.
+converged at iteration 682 with logLik: -5893.051 
+mod1 simulation 394 iteration 1 completed.
+converged at iteration 261 with logLik: -8662.905 
+mod2 simulation 394 iteration 1 completed.
+converged at iteration 922 with logLik: -6132.934 
+mod1 simulation 395 iteration 1 completed.
+converged at iteration 229 with logLik: -8862.856 
+mod2 simulation 395 iteration 1 completed.
+converged at iteration 684 with logLik: -6027.689 
+mod1 simulation 396 iteration 1 completed.
+converged at iteration 327 with logLik: -8740.33 
+mod2 simulation 396 iteration 1 completed.
+converged at iteration 221 with logLik: -6054.628 
+mod1 simulation 397 iteration 1 completed.
+converged at iteration 289 with logLik: -8721.504 
+mod2 simulation 397 iteration 1 completed.
+converged at iteration 200 with logLik: -6008.235 
+mod1 simulation 398 iteration 1 completed.
+converged at iteration 363 with logLik: -8746.447 
+mod2 simulation 398 iteration 1 completed.
+converged at iteration 569 with logLik: -6091.977 
+mod1 simulation 399 iteration 1 completed.
+converged at iteration 799 with logLik: -8758.378 
+mod2 simulation 399 iteration 1 completed.
+converged at iteration 219 with logLik: -5956.798 
+mod1 simulation 400 iteration 1 completed.
+converged at iteration 323 with logLik: -8696.12 
+mod2 simulation 400 iteration 1 completed.
+converged at iteration 709 with logLik: -6017.033 
+mod1 simulation 401 iteration 1 completed.
+converged at iteration 1223 with logLik: -8697.31 
+mod2 simulation 401 iteration 1 completed.
+converged at iteration 419 with logLik: -5902.297 
+mod1 simulation 402 iteration 1 completed.
+converged at iteration 391 with logLik: -8653.16 
+mod2 simulation 402 iteration 1 completed.
+converged at iteration 830 with logLik: -6000.592 
+mod1 simulation 403 iteration 1 completed.
+converged at iteration 362 with logLik: -8728.759 
+mod2 simulation 403 iteration 1 completed.
+converged at iteration 457 with logLik: -6008.66 
+mod1 simulation 404 iteration 1 completed.
+converged at iteration 1064 with logLik: -8762.388 
+mod2 simulation 404 iteration 1 completed.
+converged at iteration 1577 with logLik: -5916.306 
+mod1 simulation 405 iteration 1 completed.
+converged at iteration 1130 with logLik: -8676.124 
+mod2 simulation 405 iteration 1 completed.
+converged at iteration 514 with logLik: -6034.944 
+mod1 simulation 406 iteration 1 completed.
+converged at iteration 230 with logLik: -8759.95 
+mod2 simulation 406 iteration 1 completed.
+converged at iteration 847 with logLik: -5973.091 
+mod1 simulation 407 iteration 1 completed.
+converged at iteration 750 with logLik: -8709.561 
+mod2 simulation 407 iteration 1 completed.
+converged at iteration 314 with logLik: -6133.861 
+mod1 simulation 408 iteration 1 completed.
+converged at iteration 387 with logLik: -8847.867 
+mod2 simulation 408 iteration 1 completed.
+converged at iteration 821 with logLik: -6137.842 
+mod1 simulation 409 iteration 1 completed.
+converged at iteration 440 with logLik: -8786.151 
+mod2 simulation 409 iteration 1 completed.
+converged at iteration 924 with logLik: -6145.657 
+mod1 simulation 410 iteration 1 completed.
+converged at iteration 1386 with logLik: -8825.454 
+mod2 simulation 410 iteration 1 completed.
+converged at iteration 852 with logLik: -6001.065 
+mod1 simulation 411 iteration 1 completed.
+converged at iteration 440 with logLik: -8706.598 
+mod2 simulation 411 iteration 1 completed.
+converged at iteration 1260 with logLik: -6043.793 
+mod1 simulation 412 iteration 1 completed.
+converged at iteration 1070 with logLik: -8782.457 
+mod2 simulation 412 iteration 1 completed.
+converged at iteration 822 with logLik: -5987.393 
+mod1 simulation 413 iteration 1 completed.
+converged at iteration 370 with logLik: -8733.676 
+mod2 simulation 413 iteration 1 completed.
+converged at iteration 289 with logLik: -6050.058 
+mod1 simulation 414 iteration 1 completed.
+converged at iteration 283 with logLik: -8746.415 
+mod2 simulation 414 iteration 1 completed.
+converged at iteration 248 with logLik: -6039.503 
+mod1 simulation 415 iteration 1 completed.
+converged at iteration 910 with logLik: -8748.79 
+mod2 simulation 415 iteration 1 completed.
+converged at iteration 1033 with logLik: -6226.112 
+mod1 simulation 416 iteration 1 completed.
+converged at iteration 369 with logLik: -8905.821 
+mod2 simulation 416 iteration 1 completed.
+converged at iteration 698 with logLik: -6100.78 
+mod1 simulation 417 iteration 1 completed.
+converged at iteration 367 with logLik: -8788.225 
+mod2 simulation 417 iteration 1 completed.
+converged at iteration 863 with logLik: -6030.533 
+mod1 simulation 418 iteration 1 completed.
+converged at iteration 1116 with logLik: -8757.926 
+mod2 simulation 418 iteration 1 completed.
+converged at iteration 451 with logLik: -6037.734 
+mod1 simulation 419 iteration 1 completed.
+converged at iteration 316 with logLik: -8766.409 
+mod2 simulation 419 iteration 1 completed.
+converged at iteration 816 with logLik: -6046.449 
+mod1 simulation 420 iteration 1 completed.
+converged at iteration 717 with logLik: -8716.093 
+mod2 simulation 420 iteration 1 completed.
+converged at iteration 239 with logLik: -6086.184 
+mod1 simulation 421 iteration 1 completed.
+converged at iteration 455 with logLik: -8770.71 
+mod2 simulation 421 iteration 1 completed.
+converged at iteration 305 with logLik: -5895.321 
+mod1 simulation 422 iteration 1 completed.
+converged at iteration 187 with logLik: -8652.612 
+mod2 simulation 422 iteration 1 completed.
+converged at iteration 286 with logLik: -6022.69 
+mod1 simulation 423 iteration 1 completed.
+converged at iteration 367 with logLik: -8760.868 
+mod2 simulation 423 iteration 1 completed.
+converged at iteration 652 with logLik: -6094.364 
+mod1 simulation 424 iteration 1 completed.
+converged at iteration 927 with logLik: -8788.526 
+mod2 simulation 424 iteration 1 completed.
+converged at iteration 1066 with logLik: -6171.729 
+mod1 simulation 425 iteration 1 completed.
+converged at iteration 1179 with logLik: -8851.002 
+mod2 simulation 425 iteration 1 completed.
+converged at iteration 2734 with logLik: -5991.139 
+mod1 simulation 426 iteration 1 completed.
+converged at iteration 1017 with logLik: -8717.936 
+mod2 simulation 426 iteration 1 completed.
+converged at iteration 959 with logLik: -5900.828 
+mod1 simulation 427 iteration 1 completed.
+converged at iteration 1130 with logLik: -8694.357 
+mod2 simulation 427 iteration 1 completed.
+converged at iteration 622 with logLik: -5934.223 
+mod1 simulation 428 iteration 1 completed.
+converged at iteration 196 with logLik: -8704.039 
+mod2 simulation 428 iteration 1 completed.
+converged at iteration 993 with logLik: -5993.88 
+mod1 simulation 429 iteration 1 completed.
+converged at iteration 1640 with logLik: -8771.807 
+mod2 simulation 429 iteration 1 completed.
+converged at iteration 633 with logLik: -6048.491 
+mod1 simulation 430 iteration 1 completed.
+converged at iteration 190 with logLik: -8767.001 
+mod2 simulation 430 iteration 1 completed.
+converged at iteration 687 with logLik: -6061.665 
+mod1 simulation 431 iteration 1 completed.
+converged at iteration 143 with logLik: -8793.49 
+mod2 simulation 431 iteration 1 completed.
+converged at iteration 422 with logLik: -6010.837 
+mod1 simulation 432 iteration 1 completed.
+converged at iteration 519 with logLik: -8723.749 
+mod2 simulation 432 iteration 1 completed.
+converged at iteration 474 with logLik: -6033.197 
+mod1 simulation 433 iteration 1 completed.
+converged at iteration 315 with logLik: -8798.653 
+mod2 simulation 433 iteration 1 completed.
+converged at iteration 345 with logLik: -6176.576 
+mod1 simulation 434 iteration 1 completed.
+converged at iteration 147 with logLik: -8820.347 
+mod2 simulation 434 iteration 1 completed.
+converged at iteration 1277 with logLik: -6050.3 
+mod1 simulation 435 iteration 1 completed.
+converged at iteration 469 with logLik: -8706.249 
+mod2 simulation 435 iteration 1 completed.
+converged at iteration 640 with logLik: -5977.261 
+mod1 simulation 436 iteration 1 completed.
+converged at iteration 400 with logLik: -8722.711 
+mod2 simulation 436 iteration 1 completed.
+converged at iteration 357 with logLik: -5940.07 
+mod1 simulation 437 iteration 1 completed.
+converged at iteration 407 with logLik: -8682.207 
+mod2 simulation 437 iteration 1 completed.
+converged at iteration 700 with logLik: -5896.707 
+mod1 simulation 438 iteration 1 completed.
+converged at iteration 228 with logLik: -8677.733 
+mod2 simulation 438 iteration 1 completed.
+converged at iteration 3098 with logLik: -6026.565 
+mod1 simulation 439 iteration 1 completed.
+converged at iteration 2268 with logLik: -8759.304 
+mod2 simulation 439 iteration 1 completed.
+converged at iteration 577 with logLik: -6145.12 
+mod1 simulation 440 iteration 1 completed.
+converged at iteration 198 with logLik: -8799.33 
+mod2 simulation 440 iteration 1 completed.
+converged at iteration 1019 with logLik: -6097.981 
+mod1 simulation 441 iteration 1 completed.
+converged at iteration 253 with logLik: -8797.567 
+mod2 simulation 441 iteration 1 completed.
+converged at iteration 556 with logLik: -5983.178 
+mod1 simulation 442 iteration 1 completed.
+converged at iteration 232 with logLik: -8702.502 
+mod2 simulation 442 iteration 1 completed.
+converged at iteration 622 with logLik: -5981.622 
+mod1 simulation 443 iteration 1 completed.
+converged at iteration 745 with logLik: -8708.564 
+mod2 simulation 443 iteration 1 completed.
+converged at iteration 884 with logLik: -6166.19 
+mod1 simulation 444 iteration 1 completed.
+converged at iteration 470 with logLik: -8793.675 
+mod2 simulation 444 iteration 1 completed.
+converged at iteration 1425 with logLik: -6050.545 
+mod1 simulation 445 iteration 1 completed.
+converged at iteration 680 with logLik: -8794.206 
+mod2 simulation 445 iteration 1 completed.
+converged at iteration 423 with logLik: -6145.527 
+mod1 simulation 446 iteration 1 completed.
+converged at iteration 418 with logLik: -8798.474 
+mod2 simulation 446 iteration 1 completed.
+converged at iteration 946 with logLik: -6075.294 
+mod1 simulation 447 iteration 1 completed.
+converged at iteration 245 with logLik: -8725.26 
+mod2 simulation 447 iteration 1 completed.
+converged at iteration 683 with logLik: -6032.747 
+mod1 simulation 448 iteration 1 completed.
+converged at iteration 966 with logLik: -8736.289 
+mod2 simulation 448 iteration 1 completed.
+converged at iteration 344 with logLik: -5927.854 
+mod1 simulation 449 iteration 1 completed.
+converged at iteration 437 with logLik: -8681.124 
+mod2 simulation 449 iteration 1 completed.
+converged at iteration 658 with logLik: -5940.288 
+mod1 simulation 450 iteration 1 completed.
+converged at iteration 414 with logLik: -8678.192 
+mod2 simulation 450 iteration 1 completed.
+converged at iteration 514 with logLik: -6041.583 
+mod1 simulation 451 iteration 1 completed.
+converged at iteration 401 with logLik: -8764.185 
+mod2 simulation 451 iteration 1 completed.
+converged at iteration 366 with logLik: -5985.281 
+mod1 simulation 452 iteration 1 completed.
+converged at iteration 149 with logLik: -8725.991 
+mod2 simulation 452 iteration 1 completed.
+converged at iteration 387 with logLik: -6003.825 
+mod1 simulation 453 iteration 1 completed.
+converged at iteration 472 with logLik: -8722.978 
+mod2 simulation 453 iteration 1 completed.
+converged at iteration 629 with logLik: -6027.248 
+mod1 simulation 454 iteration 1 completed.
+converged at iteration 518 with logLik: -8748.903 
+mod2 simulation 454 iteration 1 completed.
+converged at iteration 263 with logLik: -5954.733 
+mod1 simulation 455 iteration 1 completed.
+converged at iteration 181 with logLik: -8671.433 
+mod2 simulation 455 iteration 1 completed.
+converged at iteration 551 with logLik: -6146.765 
+mod1 simulation 456 iteration 1 completed.
+converged at iteration 445 with logLik: -8841.584 
+mod2 simulation 456 iteration 1 completed.
+converged at iteration 1327 with logLik: -6080.071 
+mod1 simulation 457 iteration 1 completed.
+converged at iteration 408 with logLik: -8740.276 
+mod2 simulation 457 iteration 1 completed.
+converged at iteration 652 with logLik: -6045.798 
+mod1 simulation 458 iteration 1 completed.
+converged at iteration 507 with logLik: -8730.785 
+mod2 simulation 458 iteration 1 completed.
+converged at iteration 485 with logLik: -5998.729 
+mod1 simulation 459 iteration 1 completed.
+converged at iteration 393 with logLik: -8735.685 
+mod2 simulation 459 iteration 1 completed.
+converged at iteration 434 with logLik: -5922.269 
+mod1 simulation 460 iteration 1 completed.
+converged at iteration 800 with logLik: -8658.076 
+mod2 simulation 460 iteration 1 completed.
+converged at iteration 826 with logLik: -6112.774 
+mod1 simulation 461 iteration 1 completed.
+converged at iteration 232 with logLik: -8753.876 
+mod2 simulation 461 iteration 1 completed.
+converged at iteration 2044 with logLik: -5976.433 
+mod1 simulation 462 iteration 1 completed.
+converged at iteration 590 with logLik: -8732.872 
+mod2 simulation 462 iteration 1 completed.
+converged at iteration 455 with logLik: -5999.391 
+mod1 simulation 463 iteration 1 completed.
+converged at iteration 138 with logLik: -8707.505 
+mod2 simulation 463 iteration 1 completed.
+converged at iteration 1537 with logLik: -5914.96 
+mod1 simulation 464 iteration 1 completed.
+converged at iteration 883 with logLik: -8642.706 
+mod2 simulation 464 iteration 1 completed.
+converged at iteration 799 with logLik: -5950.361 
+mod1 simulation 465 iteration 1 completed.
+converged at iteration 137 with logLik: -8701.609 
+mod2 simulation 465 iteration 1 completed.
+converged at iteration 738 with logLik: -6076.857 
+mod1 simulation 466 iteration 1 completed.
+converged at iteration 257 with logLik: -8755.627 
+mod2 simulation 466 iteration 1 completed.
+converged at iteration 2644 with logLik: -6000.992 
+mod1 simulation 467 iteration 1 completed.
+converged at iteration 431 with logLik: -8705.616 
+mod2 simulation 467 iteration 1 completed.
+converged at iteration 772 with logLik: -6077.435 
+mod1 simulation 468 iteration 1 completed.
+converged at iteration 1073 with logLik: -8760.765 
+mod2 simulation 468 iteration 1 completed.
+converged at iteration 1343 with logLik: -6011.08 
+mod1 simulation 469 iteration 1 completed.
+converged at iteration 482 with logLik: -8714.051 
+mod2 simulation 469 iteration 1 completed.
+converged at iteration 835 with logLik: -5960.85 
+mod1 simulation 470 iteration 1 completed.
+converged at iteration 263 with logLik: -8691.861 
+mod2 simulation 470 iteration 1 completed.
+converged at iteration 545 with logLik: -6001.243 
+mod1 simulation 471 iteration 1 completed.
+converged at iteration 412 with logLik: -8778.701 
+mod2 simulation 471 iteration 1 completed.
+converged at iteration 970 with logLik: -6035.112 
+mod1 simulation 472 iteration 1 completed.
+converged at iteration 542 with logLik: -8781.413 
+mod2 simulation 472 iteration 1 completed.
+converged at iteration 411 with logLik: -5961.148 
+mod1 simulation 473 iteration 1 completed.
+converged at iteration 387 with logLik: -8636.499 
+mod2 simulation 473 iteration 1 completed.
+converged at iteration 385 with logLik: -6078.664 
+mod1 simulation 474 iteration 1 completed.
+converged at iteration 771 with logLik: -8775.545 
+mod2 simulation 474 iteration 1 completed.
+converged at iteration 280 with logLik: -5987.491 
+mod1 simulation 475 iteration 1 completed.
+converged at iteration 735 with logLik: -8723.401 
+mod2 simulation 475 iteration 1 completed.
+converged at iteration 282 with logLik: -5941.436 
+mod1 simulation 476 iteration 1 completed.
+converged at iteration 553 with logLik: -8652.541 
+mod2 simulation 476 iteration 1 completed.
+converged at iteration 455 with logLik: -5968.567 
+mod1 simulation 477 iteration 1 completed.
+converged at iteration 449 with logLik: -8687.956 
+mod2 simulation 477 iteration 1 completed.
+converged at iteration 972 with logLik: -6063.122 
+mod1 simulation 478 iteration 1 completed.
+converged at iteration 529 with logLik: -8770.336 
+mod2 simulation 478 iteration 1 completed.
+converged at iteration 2007 with logLik: -5936.397 
+mod1 simulation 479 iteration 1 completed.
+converged at iteration 1160 with logLik: -8706.182 
+mod2 simulation 479 iteration 1 completed.
+converged at iteration 1385 with logLik: -6008.426 
+mod1 simulation 480 iteration 1 completed.
+converged at iteration 392 with logLik: -8696.524 
+mod2 simulation 480 iteration 1 completed.
+converged at iteration 625 with logLik: -6000.311 
+mod1 simulation 481 iteration 1 completed.
+converged at iteration 1052 with logLik: -8727.67 
+mod2 simulation 481 iteration 1 completed.
+converged at iteration 1261 with logLik: -6071.092 
+mod1 simulation 482 iteration 1 completed.
+converged at iteration 935 with logLik: -8797.839 
+mod2 simulation 482 iteration 1 completed.
+converged at iteration 776 with logLik: -6070.011 
+mod1 simulation 483 iteration 1 completed.
+converged at iteration 417 with logLik: -8761.306 
+mod2 simulation 483 iteration 1 completed.
+converged at iteration 691 with logLik: -5959.533 
+mod1 simulation 484 iteration 1 completed.
+converged at iteration 497 with logLik: -8726.836 
+mod2 simulation 484 iteration 1 completed.
+converged at iteration 403 with logLik: -6020.722 
+mod1 simulation 485 iteration 1 completed.
+converged at iteration 463 with logLik: -8740.661 
+mod2 simulation 485 iteration 1 completed.
+converged at iteration 495 with logLik: -5941.942 
+mod1 simulation 486 iteration 1 completed.
+converged at iteration 452 with logLik: -8664.231 
+mod2 simulation 486 iteration 1 completed.
+converged at iteration 587 with logLik: -6037.135 
+mod1 simulation 487 iteration 1 completed.
+converged at iteration 1232 with logLik: -8758.286 
+mod2 simulation 487 iteration 1 completed.
+converged at iteration 405 with logLik: -5986.206 
+mod1 simulation 488 iteration 1 completed.
+converged at iteration 145 with logLik: -8710.93 
+mod2 simulation 488 iteration 1 completed.
+converged at iteration 473 with logLik: -6178.936 
+mod1 simulation 489 iteration 1 completed.
+converged at iteration 231 with logLik: -8857.08 
+mod2 simulation 489 iteration 1 completed.
+converged at iteration 845 with logLik: -6105.816 
+mod1 simulation 490 iteration 1 completed.
+converged at iteration 258 with logLik: -8826.144 
+mod2 simulation 490 iteration 1 completed.
+converged at iteration 681 with logLik: -6091.519 
+mod1 simulation 491 iteration 1 completed.
+converged at iteration 702 with logLik: -8795.731 
+mod2 simulation 491 iteration 1 completed.
+converged at iteration 887 with logLik: -6157.064 
+mod1 simulation 492 iteration 1 completed.
+converged at iteration 1116 with logLik: -8794.387 
+mod2 simulation 492 iteration 1 completed.
+converged at iteration 250 with logLik: -5978.561 
+mod1 simulation 493 iteration 1 completed.
+converged at iteration 255 with logLik: -8723.203 
+mod2 simulation 493 iteration 1 completed.
+converged at iteration 1440 with logLik: -6092.846 
+mod1 simulation 494 iteration 1 completed.
+converged at iteration 509 with logLik: -8795.285 
+mod2 simulation 494 iteration 1 completed.
+converged at iteration 903 with logLik: -5939.708 
+mod1 simulation 495 iteration 1 completed.
+converged at iteration 198 with logLik: -8716.1 
+mod2 simulation 495 iteration 1 completed.
+converged at iteration 753 with logLik: -6071.951 
+mod1 simulation 496 iteration 1 completed.
+converged at iteration 567 with logLik: -8747.612 
+mod2 simulation 496 iteration 1 completed.
+converged at iteration 679 with logLik: -5910.922 
+mod1 simulation 497 iteration 1 completed.
+converged at iteration 194 with logLik: -8669.067 
+mod2 simulation 497 iteration 1 completed.
+converged at iteration 889 with logLik: -6088.34 
+mod1 simulation 498 iteration 1 completed.
+converged at iteration 396 with logLik: -8751.938 
+mod2 simulation 498 iteration 1 completed.
+converged at iteration 425 with logLik: -6046.804 
+mod1 simulation 499 iteration 1 completed.
+converged at iteration 375 with logLik: -8739.015 
+mod2 simulation 499 iteration 1 completed.
+converged at iteration 596 with logLik: -5986.247 
+mod1 simulation 500 iteration 1 completed.
+converged at iteration 1432 with logLik: -8724.191 
+mod2 simulation 500 iteration 1 completed.
+converged at iteration 1109 with logLik: -6248.256 
+mod1 simulation 501 iteration 1 completed.
+converged at iteration 400 with logLik: -8861.185 
+mod2 simulation 501 iteration 1 completed.
+converged at iteration 905 with logLik: -6038.057 
+mod1 simulation 502 iteration 1 completed.
+converged at iteration 732 with logLik: -8770.534 
+mod2 simulation 502 iteration 1 completed.
+converged at iteration 407 with logLik: -5984.642 
+mod1 simulation 503 iteration 1 completed.
+converged at iteration 374 with logLik: -8723.51 
+mod2 simulation 503 iteration 1 completed.
+converged at iteration 439 with logLik: -6152.142 
+mod1 simulation 504 iteration 1 completed.
+converged at iteration 651 with logLik: -8790.315 
+mod2 simulation 504 iteration 1 completed.
+converged at iteration 605 with logLik: -5979.001 
+mod1 simulation 505 iteration 1 completed.
+converged at iteration 832 with logLik: -8731.128 
+mod2 simulation 505 iteration 1 completed.
+converged at iteration 937 with logLik: -6050.91 
+mod1 simulation 506 iteration 1 completed.
+converged at iteration 2042 with logLik: -8794.62 
+mod2 simulation 506 iteration 1 completed.
+converged at iteration 1372 with logLik: -5961.591 
+mod1 simulation 507 iteration 1 completed.
+converged at iteration 420 with logLik: -8731.03 
+mod2 simulation 507 iteration 1 completed.
+converged at iteration 287 with logLik: -6066.233 
+mod1 simulation 508 iteration 1 completed.
+converged at iteration 528 with logLik: -8770.565 
+mod2 simulation 508 iteration 1 completed.
+converged at iteration 625 with logLik: -6149.902 
+mod1 simulation 509 iteration 1 completed.
+converged at iteration 595 with logLik: -8803.816 
+mod2 simulation 509 iteration 1 completed.
+converged at iteration 684 with logLik: -5879.955 
+mod1 simulation 510 iteration 1 completed.
+converged at iteration 89 with logLik: -8658.857 
+mod2 simulation 510 iteration 1 completed.
+converged at iteration 2647 with logLik: -6168.824 
+mod1 simulation 511 iteration 1 completed.
+converged at iteration 917 with logLik: -8876.672 
+mod2 simulation 511 iteration 1 completed.
+converged at iteration 985 with logLik: -6070.626 
+mod1 simulation 512 iteration 1 completed.
+converged at iteration 441 with logLik: -8774.052 
+mod2 simulation 512 iteration 1 completed.
+converged at iteration 429 with logLik: -6138.898 
+mod1 simulation 513 iteration 1 completed.
+converged at iteration 330 with logLik: -8736.408 
+mod2 simulation 513 iteration 1 completed.
+converged at iteration 367 with logLik: -5976.466 
+mod1 simulation 514 iteration 1 completed.
+converged at iteration 306 with logLik: -8701.957 
+mod2 simulation 514 iteration 1 completed.
+converged at iteration 298 with logLik: -6041.42 
+mod1 simulation 515 iteration 1 completed.
+converged at iteration 340 with logLik: -8801.693 
+mod2 simulation 515 iteration 1 completed.
+converged at iteration 905 with logLik: -5992.651 
+mod1 simulation 516 iteration 1 completed.
+converged at iteration 725 with logLik: -8756.027 
+mod2 simulation 516 iteration 1 completed.
+converged at iteration 1474 with logLik: -6009.854 
+mod1 simulation 517 iteration 1 completed.
+converged at iteration 678 with logLik: -8715.627 
+mod2 simulation 517 iteration 1 completed.
+converged at iteration 1195 with logLik: -6052.788 
+mod1 simulation 518 iteration 1 completed.
+converged at iteration 1386 with logLik: -8801.053 
+mod2 simulation 518 iteration 1 completed.
+converged at iteration 705 with logLik: -6142.261 
+mod1 simulation 519 iteration 1 completed.
+converged at iteration 579 with logLik: -8801.138 
+mod2 simulation 519 iteration 1 completed.
+converged at iteration 326 with logLik: -5969.216 
+mod1 simulation 520 iteration 1 completed.
+converged at iteration 331 with logLik: -8721.964 
+mod2 simulation 520 iteration 1 completed.
+converged at iteration 681 with logLik: -5983.516 
+mod1 simulation 521 iteration 1 completed.
+converged at iteration 579 with logLik: -8724.751 
+mod2 simulation 521 iteration 1 completed.
+converged at iteration 596 with logLik: -5992.393 
+mod1 simulation 522 iteration 1 completed.
+converged at iteration 218 with logLik: -8734.251 
+mod2 simulation 522 iteration 1 completed.
+converged at iteration 635 with logLik: -6055.566 
+mod1 simulation 523 iteration 1 completed.
+converged at iteration 476 with logLik: -8715.966 
+mod2 simulation 523 iteration 1 completed.
+converged at iteration 1226 with logLik: -6120.553 
+mod1 simulation 524 iteration 1 completed.
+converged at iteration 319 with logLik: -8805.753 
+mod2 simulation 524 iteration 1 completed.
+converged at iteration 416 with logLik: -6015.36 
+mod1 simulation 525 iteration 1 completed.
+converged at iteration 286 with logLik: -8698.101 
+mod2 simulation 525 iteration 1 completed.
+converged at iteration 445 with logLik: -6115.699 
+mod1 simulation 526 iteration 1 completed.
+converged at iteration 218 with logLik: -8785.235 
+mod2 simulation 526 iteration 1 completed.
+converged at iteration 437 with logLik: -5898.928 
+mod1 simulation 527 iteration 1 completed.
+converged at iteration 1147 with logLik: -8633.195 
+mod2 simulation 527 iteration 1 completed.
+converged at iteration 1613 with logLik: -6101.351 
+mod1 simulation 528 iteration 1 completed.
+converged at iteration 1169 with logLik: -8754.592 
+mod2 simulation 528 iteration 1 completed.
+converged at iteration 272 with logLik: -6002.752 
+mod1 simulation 529 iteration 1 completed.
+converged at iteration 150 with logLik: -8752.02 
+mod2 simulation 529 iteration 1 completed.
+converged at iteration 369 with logLik: -5939.682 
+mod1 simulation 530 iteration 1 completed.
+converged at iteration 298 with logLik: -8710.587 
+mod2 simulation 530 iteration 1 completed.
+converged at iteration 751 with logLik: -6107.976 
+mod1 simulation 531 iteration 1 completed.
+converged at iteration 571 with logLik: -8750.993 
+mod2 simulation 531 iteration 1 completed.
+converged at iteration 573 with logLik: -5963.338 
+mod1 simulation 532 iteration 1 completed.
+converged at iteration 281 with logLik: -8696.83 
+mod2 simulation 532 iteration 1 completed.
+converged at iteration 522 with logLik: -6032.412 
+mod1 simulation 533 iteration 1 completed.
+converged at iteration 203 with logLik: -8744.741 
+mod2 simulation 533 iteration 1 completed.
+converged at iteration 547 with logLik: -5938.365 
+mod1 simulation 534 iteration 1 completed.
+converged at iteration 288 with logLik: -8689.667 
+mod2 simulation 534 iteration 1 completed.
+converged at iteration 1011 with logLik: -6096.298 
+mod1 simulation 535 iteration 1 completed.
+converged at iteration 376 with logLik: -8789.19 
+mod2 simulation 535 iteration 1 completed.
+converged at iteration 978 with logLik: -6075.286 
+mod1 simulation 536 iteration 1 completed.
+converged at iteration 630 with logLik: -8758.956 
+mod2 simulation 536 iteration 1 completed.
+mod1 simulation 537 iteration 1 failed.
+converged at iteration 1991 with logLik: -6117.714 
+mod1 simulation 537 iteration 2 completed.
+converged at iteration 496 with logLik: -8776.656 
+mod2 simulation 537 iteration 1 completed.
+converged at iteration 935 with logLik: -5919.933 
+mod1 simulation 538 iteration 1 completed.
+converged at iteration 393 with logLik: -8667.328 
+mod2 simulation 538 iteration 1 completed.
+converged at iteration 422 with logLik: -6103.904 
+mod1 simulation 539 iteration 1 completed.
+converged at iteration 405 with logLik: -8809.832 
+mod2 simulation 539 iteration 1 completed.
+converged at iteration 766 with logLik: -6066.766 
+mod1 simulation 540 iteration 1 completed.
+converged at iteration 243 with logLik: -8763.077 
+mod2 simulation 540 iteration 1 completed.
+converged at iteration 453 with logLik: -6009.681 
+mod1 simulation 541 iteration 1 completed.
+converged at iteration 462 with logLik: -8737.04 
+mod2 simulation 541 iteration 1 completed.
+converged at iteration 482 with logLik: -6011.941 
+mod1 simulation 542 iteration 1 completed.
+converged at iteration 458 with logLik: -8747.884 
+mod2 simulation 542 iteration 1 completed.
+converged at iteration 1339 with logLik: -6088.876 
+mod1 simulation 543 iteration 1 completed.
+converged at iteration 1273 with logLik: -8771.893 
+mod2 simulation 543 iteration 1 completed.
+converged at iteration 1442 with logLik: -6063.521 
+mod1 simulation 544 iteration 1 completed.
+converged at iteration 1085 with logLik: -8744.367 
+mod2 simulation 544 iteration 1 completed.
+converged at iteration 260 with logLik: -6082.372 
+mod1 simulation 545 iteration 1 completed.
+converged at iteration 328 with logLik: -8768.819 
+mod2 simulation 545 iteration 1 completed.
+converged at iteration 159 with logLik: -6120.869 
+mod1 simulation 546 iteration 1 completed.
+converged at iteration 369 with logLik: -8779.156 
+mod2 simulation 546 iteration 1 completed.
+converged at iteration 451 with logLik: -5952.36 
+mod1 simulation 547 iteration 1 completed.
+converged at iteration 1272 with logLik: -8656.468 
+mod2 simulation 547 iteration 1 completed.
+converged at iteration 913 with logLik: -5975.163 
+mod1 simulation 548 iteration 1 completed.
+converged at iteration 511 with logLik: -8732.587 
+mod2 simulation 548 iteration 1 completed.
+converged at iteration 992 with logLik: -6012.115 
+mod1 simulation 549 iteration 1 completed.
+converged at iteration 659 with logLik: -8757.356 
+mod2 simulation 549 iteration 1 completed.
+converged at iteration 634 with logLik: -6020.306 
+mod1 simulation 550 iteration 1 completed.
+converged at iteration 387 with logLik: -8723.518 
+mod2 simulation 550 iteration 1 completed.
+converged at iteration 856 with logLik: -6069.188 
+mod1 simulation 551 iteration 1 completed.
+converged at iteration 415 with logLik: -8789.06 
+mod2 simulation 551 iteration 1 completed.
+converged at iteration 553 with logLik: -6025.516 
+mod1 simulation 552 iteration 1 completed.
+converged at iteration 227 with logLik: -8730.593 
+mod2 simulation 552 iteration 1 completed.
+converged at iteration 708 with logLik: -6132.739 
+mod1 simulation 553 iteration 1 completed.
+converged at iteration 700 with logLik: -8791.738 
+mod2 simulation 553 iteration 1 completed.
+converged at iteration 894 with logLik: -6103.276 
+mod1 simulation 554 iteration 1 completed.
+converged at iteration 628 with logLik: -8770.599 
+mod2 simulation 554 iteration 1 completed.
+converged at iteration 1003 with logLik: -5954.908 
+mod1 simulation 555 iteration 1 completed.
+converged at iteration 1181 with logLik: -8691.927 
+mod2 simulation 555 iteration 1 completed.
+converged at iteration 1374 with logLik: -5981.927 
+mod1 simulation 556 iteration 1 completed.
+converged at iteration 657 with logLik: -8730.587 
+mod2 simulation 556 iteration 1 completed.
+converged at iteration 902 with logLik: -6120.699 
+mod1 simulation 557 iteration 1 completed.
+converged at iteration 861 with logLik: -8817.811 
+mod2 simulation 557 iteration 1 completed.
+converged at iteration 372 with logLik: -5973.645 
+mod1 simulation 558 iteration 1 completed.
+converged at iteration 1576 with logLik: -8714.325 
+mod2 simulation 558 iteration 1 completed.
+converged at iteration 519 with logLik: -6132.557 
+mod1 simulation 559 iteration 1 completed.
+converged at iteration 135 with logLik: -8845.292 
+mod2 simulation 559 iteration 1 completed.
+converged at iteration 775 with logLik: -6163.877 
+mod1 simulation 560 iteration 1 completed.
+converged at iteration 1171 with logLik: -8794.976 
+mod2 simulation 560 iteration 1 completed.
+converged at iteration 1263 with logLik: -6056.76 
+mod1 simulation 561 iteration 1 completed.
+converged at iteration 300 with logLik: -8743.668 
+mod2 simulation 561 iteration 1 completed.
+converged at iteration 908 with logLik: -5965.036 
+mod1 simulation 562 iteration 1 completed.
+converged at iteration 434 with logLik: -8691.292 
+mod2 simulation 562 iteration 1 completed.
+converged at iteration 140 with logLik: -6019.961 
+mod1 simulation 563 iteration 1 completed.
+converged at iteration 124 with logLik: -8753.158 
+mod2 simulation 563 iteration 1 completed.
+converged at iteration 450 with logLik: -6100.906 
+mod1 simulation 564 iteration 1 completed.
+converged at iteration 519 with logLik: -8797.807 
+mod2 simulation 564 iteration 1 completed.
+converged at iteration 256 with logLik: -6111.787 
+mod1 simulation 565 iteration 1 completed.
+converged at iteration 585 with logLik: -8771.85 
+mod2 simulation 565 iteration 1 completed.
+converged at iteration 477 with logLik: -6027.664 
+mod1 simulation 566 iteration 1 completed.
+converged at iteration 189 with logLik: -8770.98 
+mod2 simulation 566 iteration 1 completed.
+converged at iteration 212 with logLik: -5949.402 
+mod1 simulation 567 iteration 1 completed.
+converged at iteration 444 with logLik: -8705.837 
+mod2 simulation 567 iteration 1 completed.
+converged at iteration 1678 with logLik: -6124.515 
+mod1 simulation 568 iteration 1 completed.
+converged at iteration 628 with logLik: -8721.199 
+mod2 simulation 568 iteration 1 completed.
+converged at iteration 829 with logLik: -5927.613 
+mod1 simulation 569 iteration 1 completed.
+converged at iteration 519 with logLik: -8664.037 
+mod2 simulation 569 iteration 1 completed.
+converged at iteration 502 with logLik: -6069.889 
+mod1 simulation 570 iteration 1 completed.
+converged at iteration 777 with logLik: -8738.896 
+mod2 simulation 570 iteration 1 completed.
+converged at iteration 537 with logLik: -5972.698 
+mod1 simulation 571 iteration 1 completed.
+converged at iteration 257 with logLik: -8758.419 
+mod2 simulation 571 iteration 1 completed.
+converged at iteration 457 with logLik: -6077.908 
+mod1 simulation 572 iteration 1 completed.
+converged at iteration 384 with logLik: -8741.855 
+mod2 simulation 572 iteration 1 completed.
+converged at iteration 593 with logLik: -5963.267 
+mod1 simulation 573 iteration 1 completed.
+converged at iteration 252 with logLik: -8691.328 
+mod2 simulation 573 iteration 1 completed.
+converged at iteration 757 with logLik: -6061.359 
+mod1 simulation 574 iteration 1 completed.
+converged at iteration 213 with logLik: -8799.862 
+mod2 simulation 574 iteration 1 completed.
+converged at iteration 574 with logLik: -6054.285 
+mod1 simulation 575 iteration 1 completed.
+converged at iteration 430 with logLik: -8755.677 
+mod2 simulation 575 iteration 1 completed.
+converged at iteration 854 with logLik: -5906.05 
+mod1 simulation 576 iteration 1 completed.
+converged at iteration 1525 with logLik: -8635.593 
+mod2 simulation 576 iteration 1 completed.
+converged at iteration 786 with logLik: -5971.545 
+mod1 simulation 577 iteration 1 completed.
+converged at iteration 536 with logLik: -8690.116 
+mod2 simulation 577 iteration 1 completed.
+converged at iteration 223 with logLik: -5985.26 
+mod1 simulation 578 iteration 1 completed.
+converged at iteration 249 with logLik: -8700.143 
+mod2 simulation 578 iteration 1 completed.
+converged at iteration 563 with logLik: -6094.326 
+mod1 simulation 579 iteration 1 completed.
+converged at iteration 504 with logLik: -8803.683 
+mod2 simulation 579 iteration 1 completed.
+converged at iteration 718 with logLik: -5998.834 
+mod1 simulation 580 iteration 1 completed.
+converged at iteration 546 with logLik: -8727.841 
+mod2 simulation 580 iteration 1 completed.
+converged at iteration 256 with logLik: -6017.435 
+mod1 simulation 581 iteration 1 completed.
+converged at iteration 334 with logLik: -8707.059 
+mod2 simulation 581 iteration 1 completed.
+converged at iteration 907 with logLik: -6112.261 
+mod1 simulation 582 iteration 1 completed.
+converged at iteration 303 with logLik: -8769.509 
+mod2 simulation 582 iteration 1 completed.
+converged at iteration 339 with logLik: -5962.151 
+mod1 simulation 583 iteration 1 completed.
+converged at iteration 429 with logLik: -8690.185 
+mod2 simulation 583 iteration 1 completed.
+converged at iteration 2294 with logLik: -6002.461 
+mod1 simulation 584 iteration 1 completed.
+converged at iteration 510 with logLik: -8734.489 
+mod2 simulation 584 iteration 1 completed.
+converged at iteration 1130 with logLik: -6011.603 
+mod1 simulation 585 iteration 1 completed.
+converged at iteration 1184 with logLik: -8714.32 
+mod2 simulation 585 iteration 1 completed.
+converged at iteration 470 with logLik: -6179.282 
+mod1 simulation 586 iteration 1 completed.
+converged at iteration 397 with logLik: -8802.826 
+mod2 simulation 586 iteration 1 completed.
+converged at iteration 1385 with logLik: -5903.023 
+mod1 simulation 587 iteration 1 completed.
+converged at iteration 523 with logLik: -8741.564 
+mod2 simulation 587 iteration 1 completed.
+converged at iteration 321 with logLik: -6063.238 
+mod1 simulation 588 iteration 1 completed.
+converged at iteration 389 with logLik: -8754.954 
+mod2 simulation 588 iteration 1 completed.
+converged at iteration 1114 with logLik: -5800.775 
+mod1 simulation 589 iteration 1 completed.
+converged at iteration 258 with logLik: -8609.315 
+mod2 simulation 589 iteration 1 completed.
+converged at iteration 714 with logLik: -6047.483 
+mod1 simulation 590 iteration 1 completed.
+converged at iteration 507 with logLik: -8785.984 
+mod2 simulation 590 iteration 1 completed.
+converged at iteration 692 with logLik: -5998.823 
+mod1 simulation 591 iteration 1 completed.
+converged at iteration 1425 with logLik: -8682.815 
+mod2 simulation 591 iteration 1 completed.
+converged at iteration 743 with logLik: -6152.766 
+mod1 simulation 592 iteration 1 completed.
+converged at iteration 207 with logLik: -8788.707 
+mod2 simulation 592 iteration 1 completed.
+converged at iteration 519 with logLik: -6113.505 
+mod1 simulation 593 iteration 1 completed.
+converged at iteration 395 with logLik: -8803.962 
+mod2 simulation 593 iteration 1 completed.
+converged at iteration 378 with logLik: -6142.063 
+mod1 simulation 594 iteration 1 completed.
+converged at iteration 628 with logLik: -8771.982 
+mod2 simulation 594 iteration 1 completed.
+converged at iteration 2061 with logLik: -5944.122 
+mod1 simulation 595 iteration 1 completed.
+converged at iteration 354 with logLik: -8699.885 
+mod2 simulation 595 iteration 1 completed.
+converged at iteration 473 with logLik: -5957.621 
+mod1 simulation 596 iteration 1 completed.
+converged at iteration 454 with logLik: -8728.487 
+mod2 simulation 596 iteration 1 completed.
+converged at iteration 728 with logLik: -6018.816 
+mod1 simulation 597 iteration 1 completed.
+converged at iteration 1272 with logLik: -8747.58 
+mod2 simulation 597 iteration 1 completed.
+converged at iteration 776 with logLik: -6069.698 
+mod1 simulation 598 iteration 1 completed.
+converged at iteration 1080 with logLik: -8804.346 
+mod2 simulation 598 iteration 1 completed.
+converged at iteration 733 with logLik: -5924.81 
+mod1 simulation 599 iteration 1 completed.
+converged at iteration 637 with logLik: -8687.638 
+mod2 simulation 599 iteration 1 completed.
+converged at iteration 1686 with logLik: -5965.106 
+mod1 simulation 600 iteration 1 completed.
+converged at iteration 903 with logLik: -8680.863 
+mod2 simulation 600 iteration 1 completed.
+converged at iteration 681 with logLik: -6099.648 
+mod1 simulation 601 iteration 1 completed.
+converged at iteration 268 with logLik: -8772.668 
+mod2 simulation 601 iteration 1 completed.
+converged at iteration 393 with logLik: -6150.199 
+mod1 simulation 602 iteration 1 completed.
+converged at iteration 649 with logLik: -8795.33 
+mod2 simulation 602 iteration 1 completed.
+converged at iteration 371 with logLik: -6002.646 
+mod1 simulation 603 iteration 1 completed.
+converged at iteration 292 with logLik: -8728.697 
+mod2 simulation 603 iteration 1 completed.
+converged at iteration 491 with logLik: -5978.272 
+mod1 simulation 604 iteration 1 completed.
+converged at iteration 410 with logLik: -8721.016 
+mod2 simulation 604 iteration 1 completed.
+converged at iteration 409 with logLik: -5854.493 
+mod1 simulation 605 iteration 1 completed.
+converged at iteration 424 with logLik: -8539.629 
+mod2 simulation 605 iteration 1 completed.
+converged at iteration 1248 with logLik: -5910.817 
+mod1 simulation 606 iteration 1 completed.
+converged at iteration 211 with logLik: -8669.899 
+mod2 simulation 606 iteration 1 completed.
+converged at iteration 840 with logLik: -5990.498 
+mod1 simulation 607 iteration 1 completed.
+converged at iteration 1348 with logLik: -8756.768 
+mod2 simulation 607 iteration 1 completed.
+converged at iteration 804 with logLik: -6010.053 
+mod1 simulation 608 iteration 1 completed.
+converged at iteration 1910 with logLik: -8731.283 
+mod2 simulation 608 iteration 1 completed.
+converged at iteration 932 with logLik: -6015.901 
+mod1 simulation 609 iteration 1 completed.
+converged at iteration 710 with logLik: -8756.607 
+mod2 simulation 609 iteration 1 completed.
+converged at iteration 228 with logLik: -6068.124 
+mod1 simulation 610 iteration 1 completed.
+converged at iteration 1240 with logLik: -8765.382 
+mod2 simulation 610 iteration 1 completed.
+converged at iteration 758 with logLik: -5990.528 
+mod1 simulation 611 iteration 1 completed.
+converged at iteration 472 with logLik: -8748.167 
+mod2 simulation 611 iteration 1 completed.
+converged at iteration 556 with logLik: -5990.93 
+mod1 simulation 612 iteration 1 completed.
+converged at iteration 431 with logLik: -8721.477 
+mod2 simulation 612 iteration 1 completed.
+converged at iteration 210 with logLik: -5932.585 
+mod1 simulation 613 iteration 1 completed.
+converged at iteration 269 with logLik: -8646.077 
+mod2 simulation 613 iteration 1 completed.
+converged at iteration 1803 with logLik: -5933.74 
+mod1 simulation 614 iteration 1 completed.
+converged at iteration 959 with logLik: -8722.651 
+mod2 simulation 614 iteration 1 completed.
+converged at iteration 890 with logLik: -5955.796 
+mod1 simulation 615 iteration 1 completed.
+converged at iteration 1211 with logLik: -8747.261 
+mod2 simulation 615 iteration 1 completed.
+converged at iteration 532 with logLik: -6025.268 
+mod1 simulation 616 iteration 1 completed.
+converged at iteration 209 with logLik: -8749.925 
+mod2 simulation 616 iteration 1 completed.
+converged at iteration 338 with logLik: -5961.04 
+mod1 simulation 617 iteration 1 completed.
+converged at iteration 477 with logLik: -8714.246 
+mod2 simulation 617 iteration 1 completed.
+converged at iteration 867 with logLik: -5936.044 
+mod1 simulation 618 iteration 1 completed.
+converged at iteration 873 with logLik: -8683.773 
+mod2 simulation 618 iteration 1 completed.
+converged at iteration 326 with logLik: -6061.368 
+mod1 simulation 619 iteration 1 completed.
+converged at iteration 355 with logLik: -8775.878 
+mod2 simulation 619 iteration 1 completed.
+converged at iteration 415 with logLik: -6051.729 
+mod1 simulation 620 iteration 1 completed.
+converged at iteration 325 with logLik: -8715.535 
+mod2 simulation 620 iteration 1 completed.
+converged at iteration 357 with logLik: -5990.234 
+mod1 simulation 621 iteration 1 completed.
+converged at iteration 270 with logLik: -8686.845 
+mod2 simulation 621 iteration 1 completed.
+converged at iteration 325 with logLik: -6102.735 
+mod1 simulation 622 iteration 1 completed.
+converged at iteration 203 with logLik: -8820.283 
+mod2 simulation 622 iteration 1 completed.
+converged at iteration 296 with logLik: -6077.717 
+mod1 simulation 623 iteration 1 completed.
+converged at iteration 275 with logLik: -8768.733 
+mod2 simulation 623 iteration 1 completed.
+converged at iteration 460 with logLik: -5875.99 
+mod1 simulation 624 iteration 1 completed.
+converged at iteration 277 with logLik: -8673.435 
+mod2 simulation 624 iteration 1 completed.
+converged at iteration 704 with logLik: -6137.238 
+mod1 simulation 625 iteration 1 completed.
+converged at iteration 261 with logLik: -8776.718 
+mod2 simulation 625 iteration 1 completed.
+converged at iteration 848 with logLik: -6134.552 
+mod1 simulation 626 iteration 1 completed.
+converged at iteration 287 with logLik: -8785.098 
+mod2 simulation 626 iteration 1 completed.
+converged at iteration 439 with logLik: -6116.847 
+mod1 simulation 627 iteration 1 completed.
+converged at iteration 777 with logLik: -8829.057 
+mod2 simulation 627 iteration 1 completed.
+converged at iteration 467 with logLik: -6028.675 
+mod1 simulation 628 iteration 1 completed.
+converged at iteration 360 with logLik: -8730.506 
+mod2 simulation 628 iteration 1 completed.
+converged at iteration 537 with logLik: -6024.932 
+mod1 simulation 629 iteration 1 completed.
+converged at iteration 855 with logLik: -8787.116 
+mod2 simulation 629 iteration 1 completed.
+converged at iteration 945 with logLik: -6027.124 
+mod1 simulation 630 iteration 1 completed.
+converged at iteration 516 with logLik: -8704.15 
+mod2 simulation 630 iteration 1 completed.
+converged at iteration 1016 with logLik: -6062.582 
+mod1 simulation 631 iteration 1 completed.
+converged at iteration 173 with logLik: -8761.309 
+mod2 simulation 631 iteration 1 completed.
+converged at iteration 273 with logLik: -6018.859 
+mod1 simulation 632 iteration 1 completed.
+converged at iteration 295 with logLik: -8732.439 
+mod2 simulation 632 iteration 1 completed.
+converged at iteration 1191 with logLik: -5948.106 
+mod1 simulation 633 iteration 1 completed.
+converged at iteration 665 with logLik: -8714.81 
+mod2 simulation 633 iteration 1 completed.
+converged at iteration 230 with logLik: -5925.378 
+mod1 simulation 634 iteration 1 completed.
+converged at iteration 1382 with logLik: -8734.699 
+mod2 simulation 634 iteration 1 completed.
+converged at iteration 454 with logLik: -5919.433 
+mod1 simulation 635 iteration 1 completed.
+converged at iteration 336 with logLik: -8699.64 
+mod2 simulation 635 iteration 1 completed.
+converged at iteration 478 with logLik: -6119.774 
+mod1 simulation 636 iteration 1 completed.
+converged at iteration 629 with logLik: -8803.78 
+mod2 simulation 636 iteration 1 completed.
+converged at iteration 242 with logLik: -6046.589 
+mod1 simulation 637 iteration 1 completed.
+converged at iteration 699 with logLik: -8761.328 
+mod2 simulation 637 iteration 1 completed.
+converged at iteration 636 with logLik: -5959.618 
+mod1 simulation 638 iteration 1 completed.
+converged at iteration 693 with logLik: -8691.189 
+mod2 simulation 638 iteration 1 completed.
+converged at iteration 558 with logLik: -5910.59 
+mod1 simulation 639 iteration 1 completed.
+converged at iteration 580 with logLik: -8681.521 
+mod2 simulation 639 iteration 1 completed.
+converged at iteration 656 with logLik: -6108.207 
+mod1 simulation 640 iteration 1 completed.
+converged at iteration 831 with logLik: -8795.116 
+mod2 simulation 640 iteration 1 completed.
+converged at iteration 368 with logLik: -6035.274 
+mod1 simulation 641 iteration 1 completed.
+converged at iteration 1050 with logLik: -8780.345 
+mod2 simulation 641 iteration 1 completed.
+converged at iteration 641 with logLik: -6012.39 
+mod1 simulation 642 iteration 1 completed.
+converged at iteration 384 with logLik: -8723.812 
+mod2 simulation 642 iteration 1 completed.
+converged at iteration 1941 with logLik: -6129.597 
+mod1 simulation 643 iteration 1 completed.
+converged at iteration 477 with logLik: -8773.244 
+mod2 simulation 643 iteration 1 completed.
+converged at iteration 666 with logLik: -5953.631 
+mod1 simulation 644 iteration 1 completed.
+converged at iteration 624 with logLik: -8752.154 
+mod2 simulation 644 iteration 1 completed.
+converged at iteration 928 with logLik: -6075.677 
+mod1 simulation 645 iteration 1 completed.
+converged at iteration 334 with logLik: -8788.008 
+mod2 simulation 645 iteration 1 completed.
+converged at iteration 352 with logLik: -6021.172 
+mod1 simulation 646 iteration 1 completed.
+converged at iteration 166 with logLik: -8741.357 
+mod2 simulation 646 iteration 1 completed.
+converged at iteration 310 with logLik: -6041.385 
+mod1 simulation 647 iteration 1 completed.
+converged at iteration 224 with logLik: -8728.302 
+mod2 simulation 647 iteration 1 completed.
+converged at iteration 560 with logLik: -5991.781 
+mod1 simulation 648 iteration 1 completed.
+converged at iteration 628 with logLik: -8710.806 
+mod2 simulation 648 iteration 1 completed.
+converged at iteration 886 with logLik: -6008.22 
+mod1 simulation 649 iteration 1 completed.
+converged at iteration 799 with logLik: -8681.13 
+mod2 simulation 649 iteration 1 completed.
+converged at iteration 587 with logLik: -6067.444 
+mod1 simulation 650 iteration 1 completed.
+converged at iteration 402 with logLik: -8721.771 
+mod2 simulation 650 iteration 1 completed.
+converged at iteration 908 with logLik: -5982.999 
+mod1 simulation 651 iteration 1 completed.
+converged at iteration 375 with logLik: -8739.242 
+mod2 simulation 651 iteration 1 completed.
+converged at iteration 302 with logLik: -6125.444 
+mod1 simulation 652 iteration 1 completed.
+converged at iteration 345 with logLik: -8803.098 
+mod2 simulation 652 iteration 1 completed.
+converged at iteration 520 with logLik: -6049.309 
+mod1 simulation 653 iteration 1 completed.
+converged at iteration 229 with logLik: -8750.743 
+mod2 simulation 653 iteration 1 completed.
+converged at iteration 260 with logLik: -6035.291 
+mod1 simulation 654 iteration 1 completed.
+converged at iteration 378 with logLik: -8744.082 
+mod2 simulation 654 iteration 1 completed.
+converged at iteration 1024 with logLik: -5989.875 
+mod1 simulation 655 iteration 1 completed.
+converged at iteration 618 with logLik: -8692.761 
+mod2 simulation 655 iteration 1 completed.
+converged at iteration 214 with logLik: -6020.988 
+mod1 simulation 656 iteration 1 completed.
+converged at iteration 162 with logLik: -8732.949 
+mod2 simulation 656 iteration 1 completed.
+converged at iteration 354 with logLik: -6012.219 
+mod1 simulation 657 iteration 1 completed.
+converged at iteration 173 with logLik: -8726.586 
+mod2 simulation 657 iteration 1 completed.
+converged at iteration 510 with logLik: -6072.302 
+mod1 simulation 658 iteration 1 completed.
+converged at iteration 186 with logLik: -8730.17 
+mod2 simulation 658 iteration 1 completed.
+converged at iteration 454 with logLik: -5987.006 
+mod1 simulation 659 iteration 1 completed.
+converged at iteration 286 with logLik: -8703.909 
+mod2 simulation 659 iteration 1 completed.
+converged at iteration 307 with logLik: -5984.973 
+mod1 simulation 660 iteration 1 completed.
+converged at iteration 209 with logLik: -8713.322 
+mod2 simulation 660 iteration 1 completed.
+converged at iteration 2139 with logLik: -6109.211 
+mod1 simulation 661 iteration 1 completed.
+converged at iteration 153 with logLik: -8787.247 
+mod2 simulation 661 iteration 1 completed.
+converged at iteration 1060 with logLik: -5975.022 
+mod1 simulation 662 iteration 1 completed.
+converged at iteration 675 with logLik: -8741.85 
+mod2 simulation 662 iteration 1 completed.
+converged at iteration 542 with logLik: -5933.916 
+mod1 simulation 663 iteration 1 completed.
+converged at iteration 183 with logLik: -8682.937 
+mod2 simulation 663 iteration 1 completed.
+converged at iteration 333 with logLik: -6126.007 
+mod1 simulation 664 iteration 1 completed.
+converged at iteration 1508 with logLik: -8822.359 
+mod2 simulation 664 iteration 1 completed.
+converged at iteration 635 with logLik: -6066.16 
+mod1 simulation 665 iteration 1 completed.
+converged at iteration 390 with logLik: -8811.598 
+mod2 simulation 665 iteration 1 completed.
+converged at iteration 320 with logLik: -6030.024 
+mod1 simulation 666 iteration 1 completed.
+converged at iteration 284 with logLik: -8792.239 
+mod2 simulation 666 iteration 1 completed.
+converged at iteration 482 with logLik: -5925.27 
+mod1 simulation 667 iteration 1 completed.
+converged at iteration 742 with logLik: -8607.013 
+mod2 simulation 667 iteration 1 completed.
+converged at iteration 480 with logLik: -6081.051 
+mod1 simulation 668 iteration 1 completed.
+converged at iteration 283 with logLik: -8750.617 
+mod2 simulation 668 iteration 1 completed.
+converged at iteration 2291 with logLik: -5936.033 
+mod1 simulation 669 iteration 1 completed.
+converged at iteration 246 with logLik: -8720.509 
+mod2 simulation 669 iteration 1 completed.
+converged at iteration 510 with logLik: -5954.455 
+mod1 simulation 670 iteration 1 completed.
+converged at iteration 527 with logLik: -8712.826 
+mod2 simulation 670 iteration 1 completed.
+converged at iteration 372 with logLik: -5876.038 
+mod1 simulation 671 iteration 1 completed.
+converged at iteration 236 with logLik: -8632.159 
+mod2 simulation 671 iteration 1 completed.
+converged at iteration 1432 with logLik: -6056.164 
+mod1 simulation 672 iteration 1 completed.
+converged at iteration 323 with logLik: -8793.965 
+mod2 simulation 672 iteration 1 completed.
+converged at iteration 599 with logLik: -6006.141 
+mod1 simulation 673 iteration 1 completed.
+converged at iteration 176 with logLik: -8738.657 
+mod2 simulation 673 iteration 1 completed.
+converged at iteration 1571 with logLik: -5864.778 
+mod1 simulation 674 iteration 1 completed.
+converged at iteration 806 with logLik: -8609.731 
+mod2 simulation 674 iteration 1 completed.
+converged at iteration 463 with logLik: -6087.219 
+mod1 simulation 675 iteration 1 completed.
+converged at iteration 988 with logLik: -8722.657 
+mod2 simulation 675 iteration 1 completed.
+converged at iteration 1267 with logLik: -5934.049 
+mod1 simulation 676 iteration 1 completed.
+converged at iteration 557 with logLik: -8728.533 
+mod2 simulation 676 iteration 1 completed.
+converged at iteration 431 with logLik: -5996.389 
+mod1 simulation 677 iteration 1 completed.
+converged at iteration 369 with logLik: -8729.668 
+mod2 simulation 677 iteration 1 completed.
+converged at iteration 544 with logLik: -6112.322 
+mod1 simulation 678 iteration 1 completed.
+converged at iteration 264 with logLik: -8793.205 
+mod2 simulation 678 iteration 1 completed.
+converged at iteration 639 with logLik: -5934.62 
+mod1 simulation 679 iteration 1 completed.
+converged at iteration 799 with logLik: -8694.679 
+mod2 simulation 679 iteration 1 completed.
+converged at iteration 1133 with logLik: -5968.675 
+mod1 simulation 680 iteration 1 completed.
+converged at iteration 625 with logLik: -8665.362 
+mod2 simulation 680 iteration 1 completed.
+converged at iteration 302 with logLik: -5978.746 
+mod1 simulation 681 iteration 1 completed.
+converged at iteration 274 with logLik: -8730.988 
+mod2 simulation 681 iteration 1 completed.
+converged at iteration 703 with logLik: -5949.369 
+mod1 simulation 682 iteration 1 completed.
+converged at iteration 148 with logLik: -8728.158 
+mod2 simulation 682 iteration 1 completed.
+converged at iteration 1406 with logLik: -6097.267 
+mod1 simulation 683 iteration 1 completed.
+converged at iteration 1130 with logLik: -8783.86 
+mod2 simulation 683 iteration 1 completed.
+converged at iteration 517 with logLik: -6083.257 
+mod1 simulation 684 iteration 1 completed.
+converged at iteration 211 with logLik: -8757.935 
+mod2 simulation 684 iteration 1 completed.
+converged at iteration 696 with logLik: -6101.983 
+mod1 simulation 685 iteration 1 completed.
+converged at iteration 436 with logLik: -8820.34 
+mod2 simulation 685 iteration 1 completed.
+converged at iteration 1587 with logLik: -6103.683 
+mod1 simulation 686 iteration 1 completed.
+converged at iteration 790 with logLik: -8770.821 
+mod2 simulation 686 iteration 1 completed.
+converged at iteration 529 with logLik: -6012.991 
+mod1 simulation 687 iteration 1 completed.
+converged at iteration 452 with logLik: -8724.954 
+mod2 simulation 687 iteration 1 completed.
+converged at iteration 904 with logLik: -6027.626 
+mod1 simulation 688 iteration 1 completed.
+converged at iteration 439 with logLik: -8731.454 
+mod2 simulation 688 iteration 1 completed.
+converged at iteration 585 with logLik: -5930.602 
+mod1 simulation 689 iteration 1 completed.
+converged at iteration 164 with logLik: -8685.951 
+mod2 simulation 689 iteration 1 completed.
+converged at iteration 335 with logLik: -6180.451 
+mod1 simulation 690 iteration 1 completed.
+converged at iteration 209 with logLik: -8776.553 
+mod2 simulation 690 iteration 1 completed.
+converged at iteration 665 with logLik: -6117.197 
+mod1 simulation 691 iteration 1 completed.
+converged at iteration 197 with logLik: -8765.885 
+mod2 simulation 691 iteration 1 completed.
+converged at iteration 183 with logLik: -6001.801 
+mod1 simulation 692 iteration 1 completed.
+converged at iteration 229 with logLik: -8738.287 
+mod2 simulation 692 iteration 1 completed.
+converged at iteration 673 with logLik: -5986.735 
+mod1 simulation 693 iteration 1 completed.
+converged at iteration 212 with logLik: -8764.699 
+mod2 simulation 693 iteration 1 completed.
+converged at iteration 264 with logLik: -6051.835 
+mod1 simulation 694 iteration 1 completed.
+converged at iteration 294 with logLik: -8804.159 
+mod2 simulation 694 iteration 1 completed.
+converged at iteration 638 with logLik: -6033.483 
+mod1 simulation 695 iteration 1 completed.
+converged at iteration 376 with logLik: -8739.62 
+mod2 simulation 695 iteration 1 completed.
+converged at iteration 772 with logLik: -6081.471 
+mod1 simulation 696 iteration 1 completed.
+converged at iteration 1304 with logLik: -8769.078 
+mod2 simulation 696 iteration 1 completed.
+converged at iteration 624 with logLik: -5872.352 
+mod1 simulation 697 iteration 1 completed.
+converged at iteration 914 with logLik: -8622.564 
+mod2 simulation 697 iteration 1 completed.
+converged at iteration 221 with logLik: -6045.635 
+mod1 simulation 698 iteration 1 completed.
+converged at iteration 185 with logLik: -8747.378 
+mod2 simulation 698 iteration 1 completed.
+converged at iteration 770 with logLik: -6068.09 
+mod1 simulation 699 iteration 1 completed.
+converged at iteration 432 with logLik: -8786.412 
+mod2 simulation 699 iteration 1 completed.
+converged at iteration 1867 with logLik: -6082.684 
+mod1 simulation 700 iteration 1 completed.
+converged at iteration 1074 with logLik: -8770.662 
+mod2 simulation 700 iteration 1 completed.
+converged at iteration 2167 with logLik: -6020.021 
+mod1 simulation 701 iteration 1 completed.
+converged at iteration 2233 with logLik: -8742.027 
+mod2 simulation 701 iteration 1 completed.
+converged at iteration 201 with logLik: -6080.347 
+mod1 simulation 702 iteration 1 completed.
+converged at iteration 412 with logLik: -8766.006 
+mod2 simulation 702 iteration 1 completed.
+converged at iteration 1113 with logLik: -5935.805 
+mod1 simulation 703 iteration 1 completed.
+converged at iteration 328 with logLik: -8731.28 
+mod2 simulation 703 iteration 1 completed.
+converged at iteration 1990 with logLik: -5983.234 
+mod1 simulation 704 iteration 1 completed.
+converged at iteration 656 with logLik: -8755.725 
+mod2 simulation 704 iteration 1 completed.
+converged at iteration 415 with logLik: -6118.748 
+mod1 simulation 705 iteration 1 completed.
+converged at iteration 192 with logLik: -8799.528 
+mod2 simulation 705 iteration 1 completed.
+converged at iteration 509 with logLik: -6037.295 
+mod1 simulation 706 iteration 1 completed.
+converged at iteration 330 with logLik: -8751.25 
+mod2 simulation 706 iteration 1 completed.
+converged at iteration 1227 with logLik: -5939.672 
+mod1 simulation 707 iteration 1 completed.
+converged at iteration 1482 with logLik: -8671.196 
+mod2 simulation 707 iteration 1 completed.
+converged at iteration 228 with logLik: -6090.013 
+mod1 simulation 708 iteration 1 completed.
+converged at iteration 311 with logLik: -8783.488 
+mod2 simulation 708 iteration 1 completed.
+converged at iteration 1276 with logLik: -5997.192 
+mod1 simulation 709 iteration 1 completed.
+converged at iteration 283 with logLik: -8705.643 
+mod2 simulation 709 iteration 1 completed.
+converged at iteration 401 with logLik: -6012.981 
+mod1 simulation 710 iteration 1 completed.
+converged at iteration 453 with logLik: -8751.295 
+mod2 simulation 710 iteration 1 completed.
+converged at iteration 567 with logLik: -5982.385 
+mod1 simulation 711 iteration 1 completed.
+converged at iteration 527 with logLik: -8746.926 
+mod2 simulation 711 iteration 1 completed.
+converged at iteration 564 with logLik: -5949.743 
+mod1 simulation 712 iteration 1 completed.
+converged at iteration 1613 with logLik: -8696.666 
+mod2 simulation 712 iteration 1 completed.
+converged at iteration 486 with logLik: -5976.117 
+mod1 simulation 713 iteration 1 completed.
+converged at iteration 333 with logLik: -8689.205 
+mod2 simulation 713 iteration 1 completed.
+converged at iteration 1321 with logLik: -6123.855 
+mod1 simulation 714 iteration 1 completed.
+converged at iteration 148 with logLik: -8843.844 
+mod2 simulation 714 iteration 1 completed.
+converged at iteration 348 with logLik: -6130.608 
+mod1 simulation 715 iteration 1 completed.
+converged at iteration 402 with logLik: -8733.297 
+mod2 simulation 715 iteration 1 completed.
+converged at iteration 595 with logLik: -6025.771 
+mod1 simulation 716 iteration 1 completed.
+converged at iteration 409 with logLik: -8706.817 
+mod2 simulation 716 iteration 1 completed.
+converged at iteration 285 with logLik: -6026.177 
+mod1 simulation 717 iteration 1 completed.
+converged at iteration 398 with logLik: -8742.697 
+mod2 simulation 717 iteration 1 completed.
+converged at iteration 287 with logLik: -6070.076 
+mod1 simulation 718 iteration 1 completed.
+converged at iteration 503 with logLik: -8726.352 
+mod2 simulation 718 iteration 1 completed.
+converged at iteration 808 with logLik: -5960.667 
+mod1 simulation 719 iteration 1 completed.
+converged at iteration 1037 with logLik: -8715.989 
+mod2 simulation 719 iteration 1 completed.
+converged at iteration 743 with logLik: -6057.321 
+mod1 simulation 720 iteration 1 completed.
+converged at iteration 494 with logLik: -8744.472 
+mod2 simulation 720 iteration 1 completed.
+converged at iteration 480 with logLik: -5894.72 
+mod1 simulation 721 iteration 1 completed.
+converged at iteration 1021 with logLik: -8640.547 
+mod2 simulation 721 iteration 1 completed.
+converged at iteration 365 with logLik: -5961.116 
+mod1 simulation 722 iteration 1 completed.
+converged at iteration 244 with logLik: -8683.405 
+mod2 simulation 722 iteration 1 completed.
+converged at iteration 466 with logLik: -6138.397 
+mod1 simulation 723 iteration 1 completed.
+converged at iteration 265 with logLik: -8837.323 
+mod2 simulation 723 iteration 1 completed.
+converged at iteration 1065 with logLik: -6023.893 
+mod1 simulation 724 iteration 1 completed.
+converged at iteration 445 with logLik: -8769.702 
+mod2 simulation 724 iteration 1 completed.
+converged at iteration 1265 with logLik: -6024.076 
+mod1 simulation 725 iteration 1 completed.
+converged at iteration 1181 with logLik: -8743.589 
+mod2 simulation 725 iteration 1 completed.
+converged at iteration 647 with logLik: -6136.26 
+mod1 simulation 726 iteration 1 completed.
+converged at iteration 446 with logLik: -8793.095 
+mod2 simulation 726 iteration 1 completed.
+converged at iteration 1122 with logLik: -6005.661 
+mod1 simulation 727 iteration 1 completed.
+converged at iteration 247 with logLik: -8719.417 
+mod2 simulation 727 iteration 1 completed.
+converged at iteration 859 with logLik: -6036.295 
+mod1 simulation 728 iteration 1 completed.
+converged at iteration 232 with logLik: -8745.956 
+mod2 simulation 728 iteration 1 completed.
+converged at iteration 284 with logLik: -6062.941 
+mod1 simulation 729 iteration 1 completed.
+converged at iteration 972 with logLik: -8750.915 
+mod2 simulation 729 iteration 1 completed.
+converged at iteration 775 with logLik: -6030.167 
+mod1 simulation 730 iteration 1 completed.
+converged at iteration 830 with logLik: -8733.897 
+mod2 simulation 730 iteration 1 completed.
+converged at iteration 549 with logLik: -5946.858 
+mod1 simulation 731 iteration 1 completed.
+converged at iteration 276 with logLik: -8624.002 
+mod2 simulation 731 iteration 1 completed.
+converged at iteration 795 with logLik: -5867.208 
+mod1 simulation 732 iteration 1 completed.
+converged at iteration 222 with logLik: -8655.418 
+mod2 simulation 732 iteration 1 completed.
+converged at iteration 618 with logLik: -6114.418 
+mod1 simulation 733 iteration 1 completed.
+converged at iteration 260 with logLik: -8726.287 
+mod2 simulation 733 iteration 1 completed.
+converged at iteration 476 with logLik: -6104.595 
+mod1 simulation 734 iteration 1 completed.
+converged at iteration 310 with logLik: -8769.01 
+mod2 simulation 734 iteration 1 completed.
+converged at iteration 405 with logLik: -6016.66 
+mod1 simulation 735 iteration 1 completed.
+converged at iteration 466 with logLik: -8728.432 
+mod2 simulation 735 iteration 1 completed.
+converged at iteration 592 with logLik: -5900.932 
+mod1 simulation 736 iteration 1 completed.
+converged at iteration 1054 with logLik: -8709.863 
+mod2 simulation 736 iteration 1 completed.
+converged at iteration 340 with logLik: -6067.195 
+mod1 simulation 737 iteration 1 completed.
+converged at iteration 288 with logLik: -8810.778 
+mod2 simulation 737 iteration 1 completed.
+converged at iteration 761 with logLik: -6042.093 
+mod1 simulation 738 iteration 1 completed.
+converged at iteration 889 with logLik: -8736.466 
+mod2 simulation 738 iteration 1 completed.
+converged at iteration 230 with logLik: -6065.907 
+mod1 simulation 739 iteration 1 completed.
+converged at iteration 153 with logLik: -8769.094 
+mod2 simulation 739 iteration 1 completed.
+converged at iteration 370 with logLik: -6011.556 
+mod1 simulation 740 iteration 1 completed.
+converged at iteration 318 with logLik: -8730.505 
+mod2 simulation 740 iteration 1 completed.
+converged at iteration 548 with logLik: -6071.822 
+mod1 simulation 741 iteration 1 completed.
+converged at iteration 300 with logLik: -8790.063 
+mod2 simulation 741 iteration 1 completed.
+converged at iteration 779 with logLik: -6065.018 
+mod1 simulation 742 iteration 1 completed.
+converged at iteration 724 with logLik: -8775.389 
+mod2 simulation 742 iteration 1 completed.
+converged at iteration 347 with logLik: -5909.957 
+mod1 simulation 743 iteration 1 completed.
+converged at iteration 1115 with logLik: -8714.449 
+mod2 simulation 743 iteration 1 completed.
+converged at iteration 597 with logLik: -5993.407 
+mod1 simulation 744 iteration 1 completed.
+converged at iteration 168 with logLik: -8709.667 
+mod2 simulation 744 iteration 1 completed.
+converged at iteration 797 with logLik: -6045.256 
+mod1 simulation 745 iteration 1 completed.
+converged at iteration 465 with logLik: -8735.543 
+mod2 simulation 745 iteration 1 completed.
+converged at iteration 632 with logLik: -6024.064 
+mod1 simulation 746 iteration 1 completed.
+converged at iteration 355 with logLik: -8718.566 
+mod2 simulation 746 iteration 1 completed.
+converged at iteration 676 with logLik: -6119.124 
+mod1 simulation 747 iteration 1 completed.
+converged at iteration 683 with logLik: -8756.75 
+mod2 simulation 747 iteration 1 completed.
+converged at iteration 539 with logLik: -6067.724 
+mod1 simulation 748 iteration 1 completed.
+converged at iteration 384 with logLik: -8762.876 
+mod2 simulation 748 iteration 1 completed.
+converged at iteration 750 with logLik: -5995.397 
+mod1 simulation 749 iteration 1 completed.
+converged at iteration 274 with logLik: -8742.741 
+mod2 simulation 749 iteration 1 completed.
+converged at iteration 750 with logLik: -5966.293 
+mod1 simulation 750 iteration 1 completed.
+converged at iteration 409 with logLik: -8737.067 
+mod2 simulation 750 iteration 1 completed.
+converged at iteration 346 with logLik: -6019.452 
+mod1 simulation 751 iteration 1 completed.
+converged at iteration 426 with logLik: -8711.728 
+mod2 simulation 751 iteration 1 completed.
+converged at iteration 333 with logLik: -6166.356 
+mod1 simulation 752 iteration 1 completed.
+converged at iteration 657 with logLik: -8783.603 
+mod2 simulation 752 iteration 1 completed.
+converged at iteration 557 with logLik: -6015.409 
+mod1 simulation 753 iteration 1 completed.
+converged at iteration 416 with logLik: -8744.836 
+mod2 simulation 753 iteration 1 completed.
+converged at iteration 755 with logLik: -6034.061 
+mod1 simulation 754 iteration 1 completed.
+converged at iteration 497 with logLik: -8770.902 
+mod2 simulation 754 iteration 1 completed.
+converged at iteration 345 with logLik: -5960.246 
+mod1 simulation 755 iteration 1 completed.
+converged at iteration 276 with logLik: -8666.135 
+mod2 simulation 755 iteration 1 completed.
+converged at iteration 722 with logLik: -6057.68 
+mod1 simulation 756 iteration 1 completed.
+converged at iteration 401 with logLik: -8772.09 
+mod2 simulation 756 iteration 1 completed.
+converged at iteration 423 with logLik: -5966.274 
+mod1 simulation 757 iteration 1 completed.
+converged at iteration 273 with logLik: -8696.247 
+mod2 simulation 757 iteration 1 completed.
+converged at iteration 444 with logLik: -6043.337 
+mod1 simulation 758 iteration 1 completed.
+converged at iteration 287 with logLik: -8784.501 
+mod2 simulation 758 iteration 1 completed.
+converged at iteration 545 with logLik: -6035.866 
+mod1 simulation 759 iteration 1 completed.
+converged at iteration 629 with logLik: -8758.986 
+mod2 simulation 759 iteration 1 completed.
+converged at iteration 539 with logLik: -5938.088 
+mod1 simulation 760 iteration 1 completed.
+converged at iteration 317 with logLik: -8667.442 
+mod2 simulation 760 iteration 1 completed.
+converged at iteration 457 with logLik: -5948.115 
+mod1 simulation 761 iteration 1 completed.
+converged at iteration 364 with logLik: -8725.899 
+mod2 simulation 761 iteration 1 completed.
+converged at iteration 882 with logLik: -5933.589 
+mod1 simulation 762 iteration 1 completed.
+converged at iteration 463 with logLik: -8696.518 
+mod2 simulation 762 iteration 1 completed.
+converged at iteration 295 with logLik: -5921.928 
+mod1 simulation 763 iteration 1 completed.
+converged at iteration 577 with logLik: -8703.316 
+mod2 simulation 763 iteration 1 completed.
+converged at iteration 1446 with logLik: -6098.835 
+mod1 simulation 764 iteration 1 completed.
+converged at iteration 782 with logLik: -8789.879 
+mod2 simulation 764 iteration 1 completed.
+converged at iteration 1019 with logLik: -6009.803 
+mod1 simulation 765 iteration 1 completed.
+converged at iteration 922 with logLik: -8724.959 
+mod2 simulation 765 iteration 1 completed.
+converged at iteration 1410 with logLik: -5968.809 
+mod1 simulation 766 iteration 1 completed.
+converged at iteration 973 with logLik: -8711.441 
+mod2 simulation 766 iteration 1 completed.
+converged at iteration 777 with logLik: -6115.184 
+mod1 simulation 767 iteration 1 completed.
+converged at iteration 1971 with logLik: -8751.964 
+mod2 simulation 767 iteration 1 completed.
+converged at iteration 690 with logLik: -6100.795 
+mod1 simulation 768 iteration 1 completed.
+converged at iteration 459 with logLik: -8804.137 
+mod2 simulation 768 iteration 1 completed.
+converged at iteration 366 with logLik: -5937.151 
+mod1 simulation 769 iteration 1 completed.
+converged at iteration 199 with logLik: -8724.086 
+mod2 simulation 769 iteration 1 completed.
+converged at iteration 584 with logLik: -6059.214 
+mod1 simulation 770 iteration 1 completed.
+converged at iteration 2215 with logLik: -8745.906 
+mod2 simulation 770 iteration 1 completed.
+converged at iteration 683 with logLik: -6096.009 
+mod1 simulation 771 iteration 1 completed.
+converged at iteration 643 with logLik: -8818.473 
+mod2 simulation 771 iteration 1 completed.
+converged at iteration 462 with logLik: -6081.268 
+mod1 simulation 772 iteration 1 completed.
+converged at iteration 464 with logLik: -8800.886 
+mod2 simulation 772 iteration 1 completed.
+converged at iteration 1240 with logLik: -5942.142 
+mod1 simulation 773 iteration 1 completed.
+converged at iteration 777 with logLik: -8743.409 
+mod2 simulation 773 iteration 1 completed.
+converged at iteration 708 with logLik: -6019.322 
+mod1 simulation 774 iteration 1 completed.
+converged at iteration 533 with logLik: -8733.601 
+mod2 simulation 774 iteration 1 completed.
+converged at iteration 729 with logLik: -5960.734 
+mod1 simulation 775 iteration 1 completed.
+converged at iteration 499 with logLik: -8697.013 
+mod2 simulation 775 iteration 1 completed.
+converged at iteration 402 with logLik: -6021.386 
+mod1 simulation 776 iteration 1 completed.
+converged at iteration 299 with logLik: -8800.68 
+mod2 simulation 776 iteration 1 completed.
+converged at iteration 1874 with logLik: -6083.381 
+mod1 simulation 777 iteration 1 completed.
+converged at iteration 683 with logLik: -8818.37 
+mod2 simulation 777 iteration 1 completed.
+converged at iteration 930 with logLik: -6015.753 
+mod1 simulation 778 iteration 1 completed.
+converged at iteration 502 with logLik: -8748.39 
+mod2 simulation 778 iteration 1 completed.
+converged at iteration 569 with logLik: -5978.18 
+mod1 simulation 779 iteration 1 completed.
+converged at iteration 552 with logLik: -8701.619 
+mod2 simulation 779 iteration 1 completed.
+converged at iteration 338 with logLik: -5997.784 
+mod1 simulation 780 iteration 1 completed.
+converged at iteration 411 with logLik: -8723.889 
+mod2 simulation 780 iteration 1 completed.
+converged at iteration 761 with logLik: -6142.569 
+mod1 simulation 781 iteration 1 completed.
+converged at iteration 203 with logLik: -8804.874 
+mod2 simulation 781 iteration 1 completed.
+converged at iteration 550 with logLik: -6047.472 
+mod1 simulation 782 iteration 1 completed.
+converged at iteration 284 with logLik: -8775.573 
+mod2 simulation 782 iteration 1 completed.
+converged at iteration 248 with logLik: -6031.543 
+mod1 simulation 783 iteration 1 completed.
+converged at iteration 339 with logLik: -8742.52 
+mod2 simulation 783 iteration 1 completed.
+converged at iteration 253 with logLik: -6026.193 
+mod1 simulation 784 iteration 1 completed.
+converged at iteration 262 with logLik: -8745.978 
+mod2 simulation 784 iteration 1 completed.
+converged at iteration 551 with logLik: -5933.693 
+mod1 simulation 785 iteration 1 completed.
+converged at iteration 1352 with logLik: -8716.921 
+mod2 simulation 785 iteration 1 completed.
+converged at iteration 653 with logLik: -6004.545 
+mod1 simulation 786 iteration 1 completed.
+converged at iteration 697 with logLik: -8742.38 
+mod2 simulation 786 iteration 1 completed.
+converged at iteration 239 with logLik: -6010.431 
+mod1 simulation 787 iteration 1 completed.
+converged at iteration 243 with logLik: -8721.689 
+mod2 simulation 787 iteration 1 completed.
+converged at iteration 490 with logLik: -5998.355 
+mod1 simulation 788 iteration 1 completed.
+converged at iteration 477 with logLik: -8726.178 
+mod2 simulation 788 iteration 1 completed.
+converged at iteration 279 with logLik: -5983.289 
+mod1 simulation 789 iteration 1 completed.
+converged at iteration 122 with logLik: -8744.34 
+mod2 simulation 789 iteration 1 completed.
+converged at iteration 436 with logLik: -6013.205 
+mod1 simulation 790 iteration 1 completed.
+converged at iteration 274 with logLik: -8739.132 
+mod2 simulation 790 iteration 1 completed.
+converged at iteration 221 with logLik: -5955.565 
+mod1 simulation 791 iteration 1 completed.
+converged at iteration 126 with logLik: -8719.029 
+mod2 simulation 791 iteration 1 completed.
+converged at iteration 437 with logLik: -5965.39 
+mod1 simulation 792 iteration 1 completed.
+converged at iteration 654 with logLik: -8727.454 
+mod2 simulation 792 iteration 1 completed.
+converged at iteration 814 with logLik: -5942.033 
+mod1 simulation 793 iteration 1 completed.
+converged at iteration 550 with logLik: -8675.199 
+mod2 simulation 793 iteration 1 completed.
+converged at iteration 318 with logLik: -5949.691 
+mod1 simulation 794 iteration 1 completed.
+converged at iteration 285 with logLik: -8678.071 
+mod2 simulation 794 iteration 1 completed.
+converged at iteration 229 with logLik: -5984.449 
+mod1 simulation 795 iteration 1 completed.
+converged at iteration 152 with logLik: -8710.668 
+mod2 simulation 795 iteration 1 completed.
+converged at iteration 885 with logLik: -5998.537 
+mod1 simulation 796 iteration 1 completed.
+converged at iteration 500 with logLik: -8726.786 
+mod2 simulation 796 iteration 1 completed.
+converged at iteration 526 with logLik: -6001.028 
+mod1 simulation 797 iteration 1 completed.
+converged at iteration 288 with logLik: -8675.495 
+mod2 simulation 797 iteration 1 completed.
+converged at iteration 346 with logLik: -6031.749 
+mod1 simulation 798 iteration 1 completed.
+converged at iteration 449 with logLik: -8784.923 
+mod2 simulation 798 iteration 1 completed.
+converged at iteration 358 with logLik: -5946.465 
+mod1 simulation 799 iteration 1 completed.
+converged at iteration 319 with logLik: -8702.858 
+mod2 simulation 799 iteration 1 completed.
+converged at iteration 889 with logLik: -5969.083 
+mod1 simulation 800 iteration 1 completed.
+converged at iteration 277 with logLik: -8674.991 
+mod2 simulation 800 iteration 1 completed.
+converged at iteration 348 with logLik: -6088.514 
+mod1 simulation 801 iteration 1 completed.
+converged at iteration 241 with logLik: -8794.63 
+mod2 simulation 801 iteration 1 completed.
+converged at iteration 514 with logLik: -6012.104 
+mod1 simulation 802 iteration 1 completed.
+converged at iteration 381 with logLik: -8728.776 
+mod2 simulation 802 iteration 1 completed.
+converged at iteration 1042 with logLik: -5994.242 
+mod1 simulation 803 iteration 1 completed.
+converged at iteration 312 with logLik: -8695.904 
+mod2 simulation 803 iteration 1 completed.
+converged at iteration 182 with logLik: -6019.843 
+mod1 simulation 804 iteration 1 completed.
+converged at iteration 511 with logLik: -8752.386 
+mod2 simulation 804 iteration 1 completed.
+converged at iteration 1207 with logLik: -6032.079 
+mod1 simulation 805 iteration 1 completed.
+converged at iteration 272 with logLik: -8720.489 
+mod2 simulation 805 iteration 1 completed.
+converged at iteration 1167 with logLik: -5887.41 
+mod1 simulation 806 iteration 1 completed.
+converged at iteration 433 with logLik: -8650.88 
+mod2 simulation 806 iteration 1 completed.
+converged at iteration 469 with logLik: -5966.828 
+mod1 simulation 807 iteration 1 completed.
+converged at iteration 971 with logLik: -8755.076 
+mod2 simulation 807 iteration 1 completed.
+converged at iteration 1981 with logLik: -5954.401 
+mod1 simulation 808 iteration 1 completed.
+converged at iteration 539 with logLik: -8703.611 
+mod2 simulation 808 iteration 1 completed.
+converged at iteration 1645 with logLik: -5984.802 
+mod1 simulation 809 iteration 1 completed.
+converged at iteration 284 with logLik: -8692.248 
+mod2 simulation 809 iteration 1 completed.
+converged at iteration 279 with logLik: -6012.884 
+mod1 simulation 810 iteration 1 completed.
+converged at iteration 380 with logLik: -8729.619 
+mod2 simulation 810 iteration 1 completed.
+converged at iteration 756 with logLik: -6083.617 
+mod1 simulation 811 iteration 1 completed.
+converged at iteration 795 with logLik: -8754.189 
+mod2 simulation 811 iteration 1 completed.
+converged at iteration 1249 with logLik: -6044.98 
+mod1 simulation 812 iteration 1 completed.
+converged at iteration 421 with logLik: -8750.507 
+mod2 simulation 812 iteration 1 completed.
+converged at iteration 242 with logLik: -5933.774 
+mod1 simulation 813 iteration 1 completed.
+converged at iteration 382 with logLik: -8690.768 
+mod2 simulation 813 iteration 1 completed.
+converged at iteration 627 with logLik: -6010.506 
+mod1 simulation 814 iteration 1 completed.
+converged at iteration 387 with logLik: -8739.28 
+mod2 simulation 814 iteration 1 completed.
+converged at iteration 258 with logLik: -5921.57 
+mod1 simulation 815 iteration 1 completed.
+converged at iteration 309 with logLik: -8713.149 
+mod2 simulation 815 iteration 1 completed.
+converged at iteration 643 with logLik: -5883.281 
+mod1 simulation 816 iteration 1 completed.
+converged at iteration 602 with logLik: -8664.009 
+mod2 simulation 816 iteration 1 completed.
+converged at iteration 331 with logLik: -5995.59 
+mod1 simulation 817 iteration 1 completed.
+converged at iteration 241 with logLik: -8729.301 
+mod2 simulation 817 iteration 1 completed.
+converged at iteration 731 with logLik: -6101.786 
+mod1 simulation 818 iteration 1 completed.
+converged at iteration 501 with logLik: -8811.034 
+mod2 simulation 818 iteration 1 completed.
+converged at iteration 293 with logLik: -5916.157 
+mod1 simulation 819 iteration 1 completed.
+converged at iteration 471 with logLik: -8645.291 
+mod2 simulation 819 iteration 1 completed.
+converged at iteration 685 with logLik: -6103.301 
+mod1 simulation 820 iteration 1 completed.
+converged at iteration 341 with logLik: -8804.984 
+mod2 simulation 820 iteration 1 completed.
+converged at iteration 1319 with logLik: -5967.68 
+mod1 simulation 821 iteration 1 completed.
+converged at iteration 922 with logLik: -8688.197 
+mod2 simulation 821 iteration 1 completed.
+converged at iteration 1257 with logLik: -6004.363 
+mod1 simulation 822 iteration 1 completed.
+converged at iteration 867 with logLik: -8716.623 
+mod2 simulation 822 iteration 1 completed.
+converged at iteration 302 with logLik: -5941.828 
+mod1 simulation 823 iteration 1 completed.
+converged at iteration 254 with logLik: -8675.351 
+mod2 simulation 823 iteration 1 completed.
+converged at iteration 325 with logLik: -6087.576 
+mod1 simulation 824 iteration 1 completed.
+converged at iteration 277 with logLik: -8756.1 
+mod2 simulation 824 iteration 1 completed.
+converged at iteration 915 with logLik: -6150.664 
+mod1 simulation 825 iteration 1 completed.
+converged at iteration 298 with logLik: -8805.165 
+mod2 simulation 825 iteration 1 completed.
+converged at iteration 395 with logLik: -5970.911 
+mod1 simulation 826 iteration 1 completed.
+converged at iteration 344 with logLik: -8710.429 
+mod2 simulation 826 iteration 1 completed.
+converged at iteration 612 with logLik: -5988.07 
+mod1 simulation 827 iteration 1 completed.
+converged at iteration 245 with logLik: -8744.37 
+mod2 simulation 827 iteration 1 completed.
+converged at iteration 1108 with logLik: -6005.946 
+mod1 simulation 828 iteration 1 completed.
+converged at iteration 880 with logLik: -8787.105 
+mod2 simulation 828 iteration 1 completed.
+converged at iteration 1055 with logLik: -6020.342 
+mod1 simulation 829 iteration 1 completed.
+converged at iteration 619 with logLik: -8721.227 
+mod2 simulation 829 iteration 1 completed.
+converged at iteration 270 with logLik: -6129.195 
+mod1 simulation 830 iteration 1 completed.
+converged at iteration 271 with logLik: -8784.166 
+mod2 simulation 830 iteration 1 completed.
+converged at iteration 230 with logLik: -6126.633 
+mod1 simulation 831 iteration 1 completed.
+converged at iteration 295 with logLik: -8837.12 
+mod2 simulation 831 iteration 1 completed.
+converged at iteration 868 with logLik: -5952.773 
+mod1 simulation 832 iteration 1 completed.
+converged at iteration 869 with logLik: -8748.382 
+mod2 simulation 832 iteration 1 completed.
+converged at iteration 457 with logLik: -5984.697 
+mod1 simulation 833 iteration 1 completed.
+converged at iteration 396 with logLik: -8694.232 
+mod2 simulation 833 iteration 1 completed.
+converged at iteration 1988 with logLik: -6060.218 
+mod1 simulation 834 iteration 1 completed.
+converged at iteration 874 with logLik: -8762.826 
+mod2 simulation 834 iteration 1 completed.
+converged at iteration 443 with logLik: -6059.42 
+mod1 simulation 835 iteration 1 completed.
+converged at iteration 281 with logLik: -8752.192 
+mod2 simulation 835 iteration 1 completed.
+converged at iteration 861 with logLik: -6076.885 
+mod1 simulation 836 iteration 1 completed.
+converged at iteration 519 with logLik: -8769.798 
+mod2 simulation 836 iteration 1 completed.
+converged at iteration 652 with logLik: -6096.08 
+mod1 simulation 837 iteration 1 completed.
+converged at iteration 162 with logLik: -8782.613 
+mod2 simulation 837 iteration 1 completed.
+converged at iteration 582 with logLik: -6173.486 
+mod1 simulation 838 iteration 1 completed.
+converged at iteration 308 with logLik: -8783.124 
+mod2 simulation 838 iteration 1 completed.
+converged at iteration 165 with logLik: -6051.785 
+mod1 simulation 839 iteration 1 completed.
+converged at iteration 313 with logLik: -8732.384 
+mod2 simulation 839 iteration 1 completed.
+converged at iteration 2206 with logLik: -6071.443 
+mod1 simulation 840 iteration 1 completed.
+converged at iteration 446 with logLik: -8719.922 
+mod2 simulation 840 iteration 1 completed.
+converged at iteration 1072 with logLik: -6109.739 
+mod1 simulation 841 iteration 1 completed.
+converged at iteration 430 with logLik: -8785.247 
+mod2 simulation 841 iteration 1 completed.
+converged at iteration 326 with logLik: -5928.027 
+mod1 simulation 842 iteration 1 completed.
+converged at iteration 499 with logLik: -8715.409 
+mod2 simulation 842 iteration 1 completed.
+converged at iteration 480 with logLik: -5940.949 
+mod1 simulation 843 iteration 1 completed.
+converged at iteration 262 with logLik: -8729.038 
+mod2 simulation 843 iteration 1 completed.
+converged at iteration 855 with logLik: -5999.242 
+mod1 simulation 844 iteration 1 completed.
+converged at iteration 632 with logLik: -8704.378 
+mod2 simulation 844 iteration 1 completed.
+converged at iteration 886 with logLik: -5976.162 
+mod1 simulation 845 iteration 1 completed.
+converged at iteration 579 with logLik: -8746.332 
+mod2 simulation 845 iteration 1 completed.
+converged at iteration 787 with logLik: -6134.977 
+mod1 simulation 846 iteration 1 completed.
+converged at iteration 893 with logLik: -8819.229 
+mod2 simulation 846 iteration 1 completed.
+converged at iteration 1300 with logLik: -6053.727 
+mod1 simulation 847 iteration 1 completed.
+converged at iteration 591 with logLik: -8778.289 
+mod2 simulation 847 iteration 1 completed.
+converged at iteration 608 with logLik: -5998.823 
+mod1 simulation 848 iteration 1 completed.
+converged at iteration 1176 with logLik: -8747.37 
+mod2 simulation 848 iteration 1 completed.
+converged at iteration 601 with logLik: -6090.715 
+mod1 simulation 849 iteration 1 completed.
+converged at iteration 390 with logLik: -8794.355 
+mod2 simulation 849 iteration 1 completed.
+converged at iteration 590 with logLik: -6011.894 
+mod1 simulation 850 iteration 1 completed.
+converged at iteration 298 with logLik: -8705.664 
+mod2 simulation 850 iteration 1 completed.
+converged at iteration 344 with logLik: -6012.002 
+mod1 simulation 851 iteration 1 completed.
+converged at iteration 307 with logLik: -8759.175 
+mod2 simulation 851 iteration 1 completed.
+converged at iteration 722 with logLik: -5964.481 
+mod1 simulation 852 iteration 1 completed.
+converged at iteration 485 with logLik: -8682.417 
+mod2 simulation 852 iteration 1 completed.
+converged at iteration 470 with logLik: -6096.747 
+mod1 simulation 853 iteration 1 completed.
+converged at iteration 896 with logLik: -8804.569 
+mod2 simulation 853 iteration 1 completed.
+converged at iteration 442 with logLik: -6084.522 
+mod1 simulation 854 iteration 1 completed.
+converged at iteration 248 with logLik: -8780.246 
+mod2 simulation 854 iteration 1 completed.
+converged at iteration 853 with logLik: -5879.892 
+mod1 simulation 855 iteration 1 completed.
+converged at iteration 648 with logLik: -8662.668 
+mod2 simulation 855 iteration 1 completed.
+converged at iteration 532 with logLik: -6039.438 
+mod1 simulation 856 iteration 1 completed.
+converged at iteration 220 with logLik: -8747.848 
+mod2 simulation 856 iteration 1 completed.
+converged at iteration 818 with logLik: -6050.542 
+mod1 simulation 857 iteration 1 completed.
+converged at iteration 344 with logLik: -8713.104 
+mod2 simulation 857 iteration 1 completed.
+converged at iteration 1715 with logLik: -5925.112 
+mod1 simulation 858 iteration 1 completed.
+converged at iteration 322 with logLik: -8716.013 
+mod2 simulation 858 iteration 1 completed.
+converged at iteration 666 with logLik: -5982.819 
+mod1 simulation 859 iteration 1 completed.
+converged at iteration 1635 with logLik: -8729.153 
+mod2 simulation 859 iteration 1 completed.
+converged at iteration 304 with logLik: -6099.77 
+mod1 simulation 860 iteration 1 completed.
+converged at iteration 304 with logLik: -8814.718 
+mod2 simulation 860 iteration 1 completed.
+converged at iteration 247 with logLik: -6091.768 
+mod1 simulation 861 iteration 1 completed.
+converged at iteration 907 with logLik: -8797.826 
+mod2 simulation 861 iteration 1 completed.
+converged at iteration 345 with logLik: -5961.43 
+mod1 simulation 862 iteration 1 completed.
+converged at iteration 186 with logLik: -8691.29 
+mod2 simulation 862 iteration 1 completed.
+converged at iteration 1102 with logLik: -5998.306 
+mod1 simulation 863 iteration 1 completed.
+converged at iteration 1677 with logLik: -8699.829 
+mod2 simulation 863 iteration 1 completed.
+converged at iteration 1713 with logLik: -5967.271 
+mod1 simulation 864 iteration 1 completed.
+converged at iteration 282 with logLik: -8726.983 
+mod2 simulation 864 iteration 1 completed.
+converged at iteration 1138 with logLik: -6029.059 
+mod1 simulation 865 iteration 1 completed.
+converged at iteration 2079 with logLik: -8732.848 
+mod2 simulation 865 iteration 1 completed.
+converged at iteration 641 with logLik: -6004.647 
+mod1 simulation 866 iteration 1 completed.
+converged at iteration 254 with logLik: -8712.776 
+mod2 simulation 866 iteration 1 completed.
+converged at iteration 1109 with logLik: -5944.221 
+mod1 simulation 867 iteration 1 completed.
+converged at iteration 961 with logLik: -8648.121 
+mod2 simulation 867 iteration 1 completed.
+converged at iteration 995 with logLik: -6035.893 
+mod1 simulation 868 iteration 1 completed.
+converged at iteration 463 with logLik: -8731.358 
+mod2 simulation 868 iteration 1 completed.
+converged at iteration 861 with logLik: -6012.028 
+mod1 simulation 869 iteration 1 completed.
+converged at iteration 355 with logLik: -8781.66 
+mod2 simulation 869 iteration 1 completed.
+converged at iteration 1322 with logLik: -5995.497 
+mod1 simulation 870 iteration 1 completed.
+converged at iteration 410 with logLik: -8700.417 
+mod2 simulation 870 iteration 1 completed.
+converged at iteration 1002 with logLik: -5965.344 
+mod1 simulation 871 iteration 1 completed.
+converged at iteration 1350 with logLik: -8733.115 
+mod2 simulation 871 iteration 1 completed.
+converged at iteration 713 with logLik: -6006.612 
+mod1 simulation 872 iteration 1 completed.
+converged at iteration 642 with logLik: -8752.111 
+mod2 simulation 872 iteration 1 completed.
+converged at iteration 1618 with logLik: -5974.682 
+mod1 simulation 873 iteration 1 completed.
+converged at iteration 673 with logLik: -8714.664 
+mod2 simulation 873 iteration 1 completed.
+converged at iteration 1050 with logLik: -6025.665 
+mod1 simulation 874 iteration 1 completed.
+converged at iteration 259 with logLik: -8752.893 
+mod2 simulation 874 iteration 1 completed.
+converged at iteration 667 with logLik: -6025.549 
+mod1 simulation 875 iteration 1 completed.
+converged at iteration 1033 with logLik: -8719.2 
+mod2 simulation 875 iteration 1 completed.
+converged at iteration 448 with logLik: -5925.93 
+mod1 simulation 876 iteration 1 completed.
+converged at iteration 317 with logLik: -8662.462 
+mod2 simulation 876 iteration 1 completed.
+converged at iteration 442 with logLik: -6030.67 
+mod1 simulation 877 iteration 1 completed.
+converged at iteration 350 with logLik: -8700.68 
+mod2 simulation 877 iteration 1 completed.
+converged at iteration 403 with logLik: -6091.804 
+mod1 simulation 878 iteration 1 completed.
+converged at iteration 398 with logLik: -8792.597 
+mod2 simulation 878 iteration 1 completed.
+converged at iteration 658 with logLik: -6042.898 
+mod1 simulation 879 iteration 1 completed.
+converged at iteration 410 with logLik: -8763.606 
+mod2 simulation 879 iteration 1 completed.
+converged at iteration 998 with logLik: -6099.571 
+mod1 simulation 880 iteration 1 completed.
+converged at iteration 202 with logLik: -8769.976 
+mod2 simulation 880 iteration 1 completed.
+converged at iteration 338 with logLik: -6083.196 
+mod1 simulation 881 iteration 1 completed.
+converged at iteration 272 with logLik: -8769.964 
+mod2 simulation 881 iteration 1 completed.
+converged at iteration 1006 with logLik: -5969.558 
+mod1 simulation 882 iteration 1 completed.
+converged at iteration 790 with logLik: -8709.443 
+mod2 simulation 882 iteration 1 completed.
+converged at iteration 1534 with logLik: -6027.245 
+mod1 simulation 883 iteration 1 completed.
+converged at iteration 965 with logLik: -8760.624 
+mod2 simulation 883 iteration 1 completed.
+converged at iteration 187 with logLik: -6017.162 
+mod1 simulation 884 iteration 1 completed.
+converged at iteration 530 with logLik: -8716.711 
+mod2 simulation 884 iteration 1 completed.
+converged at iteration 624 with logLik: -6107.131 
+mod1 simulation 885 iteration 1 completed.
+converged at iteration 454 with logLik: -8797.231 
+mod2 simulation 885 iteration 1 completed.
+converged at iteration 771 with logLik: -6033.652 
+mod1 simulation 886 iteration 1 completed.
+converged at iteration 663 with logLik: -8717.13 
+mod2 simulation 886 iteration 1 completed.
+converged at iteration 1838 with logLik: -6085.302 
+mod1 simulation 887 iteration 1 completed.
+converged at iteration 696 with logLik: -8778.142 
+mod2 simulation 887 iteration 1 completed.
+converged at iteration 452 with logLik: -6125.877 
+mod1 simulation 888 iteration 1 completed.
+converged at iteration 225 with logLik: -8788.089 
+mod2 simulation 888 iteration 1 completed.
+converged at iteration 437 with logLik: -5984.916 
+mod1 simulation 889 iteration 1 completed.
+converged at iteration 200 with logLik: -8728.518 
+mod2 simulation 889 iteration 1 completed.
+converged at iteration 396 with logLik: -6060.562 
+mod1 simulation 890 iteration 1 completed.
+converged at iteration 256 with logLik: -8739.17 
+mod2 simulation 890 iteration 1 completed.
+converged at iteration 1198 with logLik: -6041.18 
+mod1 simulation 891 iteration 1 completed.
+converged at iteration 298 with logLik: -8730.072 
+mod2 simulation 891 iteration 1 completed.
+converged at iteration 626 with logLik: -5995.104 
+mod1 simulation 892 iteration 1 completed.
+converged at iteration 1227 with logLik: -8683.982 
+mod2 simulation 892 iteration 1 completed.
+converged at iteration 552 with logLik: -5985.118 
+mod1 simulation 893 iteration 1 completed.
+converged at iteration 191 with logLik: -8707.727 
+mod2 simulation 893 iteration 1 completed.
+converged at iteration 511 with logLik: -6025.62 
+mod1 simulation 894 iteration 1 completed.
+converged at iteration 337 with logLik: -8749.241 
+mod2 simulation 894 iteration 1 completed.
+converged at iteration 1156 with logLik: -6017.863 
+mod1 simulation 895 iteration 1 completed.
+converged at iteration 284 with logLik: -8735.518 
+mod2 simulation 895 iteration 1 completed.
+converged at iteration 1071 with logLik: -5970.932 
+mod1 simulation 896 iteration 1 completed.
+converged at iteration 495 with logLik: -8707.598 
+mod2 simulation 896 iteration 1 completed.
+converged at iteration 184 with logLik: -5960.798 
+mod1 simulation 897 iteration 1 completed.
+converged at iteration 235 with logLik: -8715.325 
+mod2 simulation 897 iteration 1 completed.
+converged at iteration 220 with logLik: -5914.836 
+mod1 simulation 898 iteration 1 completed.
+converged at iteration 182 with logLik: -8700.189 
+mod2 simulation 898 iteration 1 completed.
+converged at iteration 341 with logLik: -5929.125 
+mod1 simulation 899 iteration 1 completed.
+converged at iteration 312 with logLik: -8717.726 
+mod2 simulation 899 iteration 1 completed.
+converged at iteration 1043 with logLik: -6100.643 
+mod1 simulation 900 iteration 1 completed.
+converged at iteration 212 with logLik: -8778.034 
+mod2 simulation 900 iteration 1 completed.
+converged at iteration 745 with logLik: -6074.514 
+mod1 simulation 901 iteration 1 completed.
+converged at iteration 467 with logLik: -8765.368 
+mod2 simulation 901 iteration 1 completed.
+converged at iteration 818 with logLik: -5993.139 
+mod1 simulation 902 iteration 1 completed.
+converged at iteration 667 with logLik: -8740.991 
+mod2 simulation 902 iteration 1 completed.
+converged at iteration 834 with logLik: -6257.854 
+mod1 simulation 903 iteration 1 completed.
+converged at iteration 497 with logLik: -8897.329 
+mod2 simulation 903 iteration 1 completed.
+converged at iteration 347 with logLik: -5932.012 
+mod1 simulation 904 iteration 1 completed.
+converged at iteration 234 with logLik: -8717.976 
+mod2 simulation 904 iteration 1 completed.
+converged at iteration 1339 with logLik: -5948.545 
+mod1 simulation 905 iteration 1 completed.
+converged at iteration 153 with logLik: -8669.81 
+mod2 simulation 905 iteration 1 completed.
+converged at iteration 564 with logLik: -6014.978 
+mod1 simulation 906 iteration 1 completed.
+converged at iteration 600 with logLik: -8772.994 
+mod2 simulation 906 iteration 1 completed.
+converged at iteration 1401 with logLik: -6010.2 
+mod1 simulation 907 iteration 1 completed.
+converged at iteration 238 with logLik: -8727.316 
+mod2 simulation 907 iteration 1 completed.
+converged at iteration 1182 with logLik: -6152.045 
+mod1 simulation 908 iteration 1 completed.
+converged at iteration 546 with logLik: -8814.307 
+mod2 simulation 908 iteration 1 completed.
+converged at iteration 1079 with logLik: -6076.669 
+mod1 simulation 909 iteration 1 completed.
+converged at iteration 136 with logLik: -8797.319 
+mod2 simulation 909 iteration 1 completed.
+converged at iteration 342 with logLik: -6071.138 
+mod1 simulation 910 iteration 1 completed.
+converged at iteration 465 with logLik: -8685.048 
+mod2 simulation 910 iteration 1 completed.
+converged at iteration 843 with logLik: -5996.554 
+mod1 simulation 911 iteration 1 completed.
+converged at iteration 316 with logLik: -8732.402 
+mod2 simulation 911 iteration 1 completed.
+converged at iteration 174 with logLik: -6122.69 
+mod1 simulation 912 iteration 1 completed.
+converged at iteration 371 with logLik: -8854.108 
+mod2 simulation 912 iteration 1 completed.
+converged at iteration 371 with logLik: -6088.254 
+mod1 simulation 913 iteration 1 completed.
+converged at iteration 492 with logLik: -8771.658 
+mod2 simulation 913 iteration 1 completed.
+converged at iteration 479 with logLik: -6040.538 
+mod1 simulation 914 iteration 1 completed.
+converged at iteration 319 with logLik: -8745.308 
+mod2 simulation 914 iteration 1 completed.
+converged at iteration 1115 with logLik: -6015.249 
+mod1 simulation 915 iteration 1 completed.
+converged at iteration 868 with logLik: -8771.075 
+mod2 simulation 915 iteration 1 completed.
+converged at iteration 463 with logLik: -5947.321 
+mod1 simulation 916 iteration 1 completed.
+converged at iteration 1605 with logLik: -8722.899 
+mod2 simulation 916 iteration 1 completed.
+converged at iteration 1209 with logLik: -5847.466 
+mod1 simulation 917 iteration 1 completed.
+converged at iteration 968 with logLik: -8633.784 
+mod2 simulation 917 iteration 1 completed.
+converged at iteration 755 with logLik: -6108.447 
+mod1 simulation 918 iteration 1 completed.
+converged at iteration 214 with logLik: -8822.985 
+mod2 simulation 918 iteration 1 completed.
+converged at iteration 1029 with logLik: -6060.468 
+mod1 simulation 919 iteration 1 completed.
+converged at iteration 245 with logLik: -8729.038 
+mod2 simulation 919 iteration 1 completed.
+converged at iteration 757 with logLik: -5998.871 
+mod1 simulation 920 iteration 1 completed.
+converged at iteration 492 with logLik: -8761.599 
+mod2 simulation 920 iteration 1 completed.
+converged at iteration 805 with logLik: -6111.126 
+mod1 simulation 921 iteration 1 completed.
+converged at iteration 629 with logLik: -8821.434 
+mod2 simulation 921 iteration 1 completed.
+converged at iteration 937 with logLik: -6059.652 
+mod1 simulation 922 iteration 1 completed.
+converged at iteration 1201 with logLik: -8768.238 
+mod2 simulation 922 iteration 1 completed.
+converged at iteration 571 with logLik: -6010.814 
+mod1 simulation 923 iteration 1 completed.
+converged at iteration 518 with logLik: -8699.897 
+mod2 simulation 923 iteration 1 completed.
+converged at iteration 1950 with logLik: -5891.244 
+mod1 simulation 924 iteration 1 completed.
+converged at iteration 361 with logLik: -8715.959 
+mod2 simulation 924 iteration 1 completed.
+converged at iteration 735 with logLik: -6101.059 
+mod1 simulation 925 iteration 1 completed.
+converged at iteration 338 with logLik: -8736.684 
+mod2 simulation 925 iteration 1 completed.
+converged at iteration 932 with logLik: -5966.595 
+mod1 simulation 926 iteration 1 completed.
+converged at iteration 410 with logLik: -8697.124 
+mod2 simulation 926 iteration 1 completed.
+converged at iteration 254 with logLik: -5948.511 
+mod1 simulation 927 iteration 1 completed.
+converged at iteration 177 with logLik: -8676.956 
+mod2 simulation 927 iteration 1 completed.
+converged at iteration 335 with logLik: -6081.057 
+mod1 simulation 928 iteration 1 completed.
+converged at iteration 495 with logLik: -8756.739 
+mod2 simulation 928 iteration 1 completed.
+converged at iteration 631 with logLik: -6018.86 
+mod1 simulation 929 iteration 1 completed.
+converged at iteration 427 with logLik: -8743.836 
+mod2 simulation 929 iteration 1 completed.
+converged at iteration 354 with logLik: -6066.118 
+mod1 simulation 930 iteration 1 completed.
+converged at iteration 160 with logLik: -8729.753 
+mod2 simulation 930 iteration 1 completed.
+converged at iteration 453 with logLik: -6140.645 
+mod1 simulation 931 iteration 1 completed.
+converged at iteration 797 with logLik: -8791.672 
+mod2 simulation 931 iteration 1 completed.
+converged at iteration 282 with logLik: -6116.347 
+mod1 simulation 932 iteration 1 completed.
+converged at iteration 445 with logLik: -8750.039 
+mod2 simulation 932 iteration 1 completed.
+converged at iteration 387 with logLik: -6079.345 
+mod1 simulation 933 iteration 1 completed.
+converged at iteration 1070 with logLik: -8784.966 
+mod2 simulation 933 iteration 1 completed.
+converged at iteration 1072 with logLik: -6101.521 
+mod1 simulation 934 iteration 1 completed.
+converged at iteration 872 with logLik: -8788.256 
+mod2 simulation 934 iteration 1 completed.
+converged at iteration 456 with logLik: -6038.764 
+mod1 simulation 935 iteration 1 completed.
+converged at iteration 508 with logLik: -8789.262 
+mod2 simulation 935 iteration 1 completed.
+converged at iteration 153 with logLik: -6073.014 
+mod1 simulation 936 iteration 1 completed.
+converged at iteration 111 with logLik: -8735.438 
+mod2 simulation 936 iteration 1 completed.
+converged at iteration 575 with logLik: -6058.096 
+mod1 simulation 937 iteration 1 completed.
+converged at iteration 467 with logLik: -8783.41 
+mod2 simulation 937 iteration 1 completed.
+converged at iteration 710 with logLik: -6084.098 
+mod1 simulation 938 iteration 1 completed.
+converged at iteration 565 with logLik: -8740.436 
+mod2 simulation 938 iteration 1 completed.
+converged at iteration 483 with logLik: -5980.646 
+mod1 simulation 939 iteration 1 completed.
+converged at iteration 310 with logLik: -8740.124 
+mod2 simulation 939 iteration 1 completed.
+converged at iteration 164 with logLik: -6061.53 
+mod1 simulation 940 iteration 1 completed.
+converged at iteration 109 with logLik: -8770.344 
+mod2 simulation 940 iteration 1 completed.
+converged at iteration 672 with logLik: -6094.379 
+mod1 simulation 941 iteration 1 completed.
+converged at iteration 356 with logLik: -8807.699 
+mod2 simulation 941 iteration 1 completed.
+converged at iteration 463 with logLik: -6067.88 
+mod1 simulation 942 iteration 1 completed.
+converged at iteration 579 with logLik: -8806.771 
+mod2 simulation 942 iteration 1 completed.
+converged at iteration 458 with logLik: -5972.07 
+mod1 simulation 943 iteration 1 completed.
+converged at iteration 1882 with logLik: -8689.272 
+mod2 simulation 943 iteration 1 completed.
+converged at iteration 550 with logLik: -6106.868 
+mod1 simulation 944 iteration 1 completed.
+converged at iteration 590 with logLik: -8744.148 
+mod2 simulation 944 iteration 1 completed.
+converged at iteration 687 with logLik: -5954.718 
+mod1 simulation 945 iteration 1 completed.
+converged at iteration 387 with logLik: -8715.749 
+mod2 simulation 945 iteration 1 completed.
+converged at iteration 392 with logLik: -6017.867 
+mod1 simulation 946 iteration 1 completed.
+converged at iteration 249 with logLik: -8714.455 
+mod2 simulation 946 iteration 1 completed.
+converged at iteration 326 with logLik: -5893.256 
+mod1 simulation 947 iteration 1 completed.
+converged at iteration 222 with logLik: -8676.895 
+mod2 simulation 947 iteration 1 completed.
+converged at iteration 259 with logLik: -6034.949 
+mod1 simulation 948 iteration 1 completed.
+converged at iteration 330 with logLik: -8727.561 
+mod2 simulation 948 iteration 1 completed.
+converged at iteration 432 with logLik: -5882.12 
+mod1 simulation 949 iteration 1 completed.
+converged at iteration 301 with logLik: -8684.56 
+mod2 simulation 949 iteration 1 completed.
+converged at iteration 2869 with logLik: -5898.467 
+mod1 simulation 950 iteration 1 completed.
+converged at iteration 243 with logLik: -8695.804 
+mod2 simulation 950 iteration 1 completed.
+converged at iteration 245 with logLik: -6116.74 
+mod1 simulation 951 iteration 1 completed.
+converged at iteration 174 with logLik: -8760.957 
+mod2 simulation 951 iteration 1 completed.
+converged at iteration 259 with logLik: -6103.736 
+mod1 simulation 952 iteration 1 completed.
+converged at iteration 286 with logLik: -8747.668 
+mod2 simulation 952 iteration 1 completed.
+converged at iteration 603 with logLik: -5889.971 
+mod1 simulation 953 iteration 1 completed.
+converged at iteration 324 with logLik: -8680.78 
+mod2 simulation 953 iteration 1 completed.
+converged at iteration 753 with logLik: -5999.215 
+mod1 simulation 954 iteration 1 completed.
+converged at iteration 633 with logLik: -8767.937 
+mod2 simulation 954 iteration 1 completed.
+converged at iteration 288 with logLik: -5974.72 
+mod1 simulation 955 iteration 1 completed.
+converged at iteration 398 with logLik: -8731.597 
+mod2 simulation 955 iteration 1 completed.
+converged at iteration 719 with logLik: -6017.775 
+mod1 simulation 956 iteration 1 completed.
+converged at iteration 298 with logLik: -8689.997 
+mod2 simulation 956 iteration 1 completed.
+converged at iteration 306 with logLik: -6064.658 
+mod1 simulation 957 iteration 1 completed.
+converged at iteration 265 with logLik: -8745.089 
+mod2 simulation 957 iteration 1 completed.
+converged at iteration 777 with logLik: -6211.358 
+mod1 simulation 958 iteration 1 completed.
+converged at iteration 635 with logLik: -8836.674 
+mod2 simulation 958 iteration 1 completed.
+converged at iteration 600 with logLik: -5943.867 
+mod1 simulation 959 iteration 1 completed.
+converged at iteration 1023 with logLik: -8668.162 
+mod2 simulation 959 iteration 1 completed.
+converged at iteration 1521 with logLik: -5979.223 
+mod1 simulation 960 iteration 1 completed.
+converged at iteration 1654 with logLik: -8713.984 
+mod2 simulation 960 iteration 1 completed.
+converged at iteration 526 with logLik: -5922.21 
+mod1 simulation 961 iteration 1 completed.
+converged at iteration 486 with logLik: -8645.319 
+mod2 simulation 961 iteration 1 completed.
+converged at iteration 216 with logLik: -6034.493 
+mod1 simulation 962 iteration 1 completed.
+converged at iteration 187 with logLik: -8706.483 
+mod2 simulation 962 iteration 1 completed.
+converged at iteration 1009 with logLik: -5981.235 
+mod1 simulation 963 iteration 1 completed.
+converged at iteration 304 with logLik: -8684.549 
+mod2 simulation 963 iteration 1 completed.
+converged at iteration 434 with logLik: -6073.927 
+mod1 simulation 964 iteration 1 completed.
+converged at iteration 121 with logLik: -8781.795 
+mod2 simulation 964 iteration 1 completed.
+converged at iteration 1168 with logLik: -5986.564 
+mod1 simulation 965 iteration 1 completed.
+converged at iteration 287 with logLik: -8771.417 
+mod2 simulation 965 iteration 1 completed.
+converged at iteration 568 with logLik: -5989.888 
+mod1 simulation 966 iteration 1 completed.
+converged at iteration 259 with logLik: -8705.954 
+mod2 simulation 966 iteration 1 completed.
+converged at iteration 713 with logLik: -6012.526 
+mod1 simulation 967 iteration 1 completed.
+converged at iteration 669 with logLik: -8772.709 
+mod2 simulation 967 iteration 1 completed.
+converged at iteration 488 with logLik: -6104.147 
+mod1 simulation 968 iteration 1 completed.
+converged at iteration 594 with logLik: -8789.56 
+mod2 simulation 968 iteration 1 completed.
+converged at iteration 354 with logLik: -5943.952 
+mod1 simulation 969 iteration 1 completed.
+converged at iteration 1024 with logLik: -8702.8 
+mod2 simulation 969 iteration 1 completed.
+converged at iteration 334 with logLik: -6034.517 
+mod1 simulation 970 iteration 1 completed.
+converged at iteration 344 with logLik: -8713.385 
+mod2 simulation 970 iteration 1 completed.
+converged at iteration 1811 with logLik: -6030.079 
+mod1 simulation 971 iteration 1 completed.
+converged at iteration 394 with logLik: -8730.405 
+mod2 simulation 971 iteration 1 completed.
+converged at iteration 536 with logLik: -5967.082 
+mod1 simulation 972 iteration 1 completed.
+converged at iteration 934 with logLik: -8718.544 
+mod2 simulation 972 iteration 1 completed.
+converged at iteration 495 with logLik: -5878.511 
+mod1 simulation 973 iteration 1 completed.
+converged at iteration 337 with logLik: -8599.299 
+mod2 simulation 973 iteration 1 completed.
+converged at iteration 693 with logLik: -6121.597 
+mod1 simulation 974 iteration 1 completed.
+converged at iteration 1038 with logLik: -8773.135 
+mod2 simulation 974 iteration 1 completed.
+converged at iteration 563 with logLik: -6026.461 
+mod1 simulation 975 iteration 1 completed.
+converged at iteration 183 with logLik: -8713.177 
+mod2 simulation 975 iteration 1 completed.
+converged at iteration 399 with logLik: -5943.889 
+mod1 simulation 976 iteration 1 completed.
+converged at iteration 246 with logLik: -8709.305 
+mod2 simulation 976 iteration 1 completed.
+converged at iteration 284 with logLik: -6006.873 
+mod1 simulation 977 iteration 1 completed.
+converged at iteration 269 with logLik: -8727.277 
+mod2 simulation 977 iteration 1 completed.
+converged at iteration 644 with logLik: -5965.932 
+mod1 simulation 978 iteration 1 completed.
+converged at iteration 492 with logLik: -8701.52 
+mod2 simulation 978 iteration 1 completed.
+converged at iteration 725 with logLik: -6021.278 
+mod1 simulation 979 iteration 1 completed.
+converged at iteration 432 with logLik: -8711.65 
+mod2 simulation 979 iteration 1 completed.
+converged at iteration 1129 with logLik: -6053.02 
+mod1 simulation 980 iteration 1 completed.
+converged at iteration 239 with logLik: -8798.502 
+mod2 simulation 980 iteration 1 completed.
+converged at iteration 678 with logLik: -6037.832 
+mod1 simulation 981 iteration 1 completed.
+converged at iteration 576 with logLik: -8719.375 
+mod2 simulation 981 iteration 1 completed.
+converged at iteration 556 with logLik: -6007.725 
+mod1 simulation 982 iteration 1 completed.
+converged at iteration 316 with logLik: -8694.037 
+mod2 simulation 982 iteration 1 completed.
+converged at iteration 1243 with logLik: -6051.264 
+mod1 simulation 983 iteration 1 completed.
+converged at iteration 182 with logLik: -8782.33 
+mod2 simulation 983 iteration 1 completed.
+converged at iteration 484 with logLik: -6018.767 
+mod1 simulation 984 iteration 1 completed.
+converged at iteration 512 with logLik: -8738.322 
+mod2 simulation 984 iteration 1 completed.
+converged at iteration 1615 with logLik: -5993.336 
+mod1 simulation 985 iteration 1 completed.
+converged at iteration 264 with logLik: -8769.357 
+mod2 simulation 985 iteration 1 completed.
+converged at iteration 560 with logLik: -6111.527 
+mod1 simulation 986 iteration 1 completed.
+converged at iteration 345 with logLik: -8800.672 
+mod2 simulation 986 iteration 1 completed.
+converged at iteration 1078 with logLik: -5933.632 
+mod1 simulation 987 iteration 1 completed.
+converged at iteration 2103 with logLik: -8716.113 
+mod2 simulation 987 iteration 1 completed.
+converged at iteration 2995 with logLik: -6169.992 
+mod1 simulation 988 iteration 1 completed.
+converged at iteration 939 with logLik: -8770.278 
+mod2 simulation 988 iteration 1 completed.
+converged at iteration 387 with logLik: -5964.38 
+mod1 simulation 989 iteration 1 completed.
+converged at iteration 415 with logLik: -8756.29 
+mod2 simulation 989 iteration 1 completed.
+converged at iteration 514 with logLik: -5946.028 
+mod1 simulation 990 iteration 1 completed.
+converged at iteration 423 with logLik: -8708.777 
+mod2 simulation 990 iteration 1 completed.
+converged at iteration 2365 with logLik: -5982.617 
+mod1 simulation 991 iteration 1 completed.
+converged at iteration 427 with logLik: -8703.12 
+mod2 simulation 991 iteration 1 completed.
+converged at iteration 1136 with logLik: -6076.578 
+mod1 simulation 992 iteration 1 completed.
+converged at iteration 1178 with logLik: -8813.082 
+mod2 simulation 992 iteration 1 completed.
+converged at iteration 904 with logLik: -6047.848 
+mod1 simulation 993 iteration 1 completed.
+converged at iteration 345 with logLik: -8775.668 
+mod2 simulation 993 iteration 1 completed.
+converged at iteration 244 with logLik: -6038.808 
+mod1 simulation 994 iteration 1 completed.
+converged at iteration 298 with logLik: -8770.546 
+mod2 simulation 994 iteration 1 completed.
+converged at iteration 225 with logLik: -6079.746 
+mod1 simulation 995 iteration 1 completed.
+converged at iteration 469 with logLik: -8718.117 
+mod2 simulation 995 iteration 1 completed.
+converged at iteration 1334 with logLik: -6029.191 
+mod1 simulation 996 iteration 1 completed.
+converged at iteration 723 with logLik: -8744.746 
+mod2 simulation 996 iteration 1 completed.
+converged at iteration 636 with logLik: -5939.379 
+mod1 simulation 997 iteration 1 completed.
+converged at iteration 383 with logLik: -8737.535 
+mod2 simulation 997 iteration 1 completed.
+converged at iteration 337 with logLik: -5949.774 
+mod1 simulation 998 iteration 1 completed.
+converged at iteration 160 with logLik: -8735.818 
+mod2 simulation 998 iteration 1 completed.
+converged at iteration 579 with logLik: -6133.898 
+mod1 simulation 999 iteration 1 completed.
+converged at iteration 483 with logLik: -8826.874 
+mod2 simulation 999 iteration 1 completed.
+converged at iteration 695 with logLik: -5969.455 
+mod1 simulation 1000 iteration 1 completed.
+converged at iteration 749 with logLik: -8728.139 
+mod2 simulation 1000 iteration 1 completed.
+There were 50 or more warnings (use warnings() to see the first 50)
+> save(out,file="simulation1.Rdata")
+> 
+> ## rerun failed simulations
+> load("simulation1.Rdata")
+> failed <- c()
+> for(i in 1:nsim) {
++   if(is.null(out[[i]][[1]])) {
++     cat("simulation",i,"of model 1 failed\n")
++     failed <- c(failed,i)
++   }
++   if(is.null(out[[i]][[2]])) {
++     cat("simulation",i,"of model 2 failed\n")
++     failed <- c(failed,i)
++   }
++ }
+> failed <- unique(failed)
+> 
+> set.seed(202109011)
+> randomSeeds <- sample(seq(nsim*1000,nsim*1000 + nsim*10000),nsim)
+> 
+> for(sim in failed) {
++   set.seed(randomSeeds[sim])
++   dat <- generate_data()
++   
++   set.seed(randomSeeds[sim])
++   mod <- depmix(list(response~1),family=list(gaussian()),data=dat,nstates=3,ntimes=rep(nt,nrep))
++   mod <- setpars(mod,truepars1)
++   ok <- FALSE
++   nTry <- 1
++   while(!ok && nTry < 21) {
++     fmod <- try(fit(mod,emcontrol=em.control(maxit = 5000, random.start = nTry > 1),verbose=FALSE))
++     if(!inherits(fmod,"try-error")) {
++       if(fmod@message == "Log likelihood converged to within tol. (relative change)") {
++         cat("mod1 simulation",sim,"iteration",nTry,"completed.\n")
++         ok <- TRUE
++         out[[sim]][[1]] <- list(pars=getpars(fmod),logLik=logLik(fmod),viterbi=posterior(fmod, type="global"),trueState=dat$trueState)
++       } else {
++         cat("mod1 simulation",sim,"iteration",nTry,"failed.\n")
++         nTry <- nTry + 1
++       }
++     } else {
++       cat("mod1 simulation",sim,"iteration",nTry,"failed.\n")
++       nTry <- nTry + 1
++     }
++   }
++   
++   set.seed(randomSeeds[sim])
++   mod <- depmix(list(response~1,missing~1),family=list(gaussian(),multinomial("identity")),data=dat,nstates=3,ntimes=rep(nt,nrep))
++   mod <- setpars(mod,truepars2)
++   ok <- FALSE
++   nTry <- 1
++   while(!ok && nTry < 21) {
++     fmod <- try(fit(mod,emcontrol=em.control(maxit = 5000, random.start = nTry > 1),verbose=FALSE))
++     if(!inherits(fmod,"try-error")) {
++       if(fmod@message == "Log likelihood converged to within tol. (relative change)") {
++         cat("mod2 simulation",sim,"iteration",nTry,"completed.\n")
++         ok <- TRUE
++         out[[sim]][[2]] <- list(pars=getpars(fmod),logLik=logLik(fmod),viterbi=posterior(fmod, type="global"),trueState=dat$trueState)
++       } else {
++         cat("mod2 simulation",sim,"iteration",nTry,"failed.\n")
++         nTry <- nTry + 1
++       }
++     } else {
++       cat("mod2 simulation",sim,"iteration",nTry,"failed.\n")
++       nTry <- nTry + 1
++     }
++   }
++ }
+> save(out,file="simulation1.Rdata")
+> 
+> proc.time()
+     user    system   elapsed 
+37222.324   143.878 37669.529 

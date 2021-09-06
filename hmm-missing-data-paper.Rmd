@@ -1,0 +1,1101 @@
+---
+title: Ignorable and non-ignorable missing data in hidden Markov models
+blinded: 0
+authors:
+- name: Maarten Speekenbrink
+  affiliation: Department of Experimental Psychology, University College London
+  email: m.speekenbrink\@ucl.ac.uk
+  thanks: The authors would like to thank Don Hedeker for sharing the data of the Schizophrenia clinical trial.
+- name: Ingmar Visser
+  affiliation: Department of Developmental Psychology, University of Amsterdam
+  email: i.visser\@uva.nl
+keywords:
+- hidden Markov models, missing data, missing not at random, state-dependent missing data, attrition
+citation_package: natbib
+bibliography: refs.bib
+biblio-style: apalike
+abstract: |
+  We consider missing data in the context of hidden Markov models with a focus 
+  on situations where data is missing not at random (MNAR) and missingness 
+  depends on the identity of the hidden states. In simulations, we show that 
+  including a submodel for state-dependent missingness reduces bias when data 
+  is MNAR and state-dependent, whilst not reducing accuracy when data is missing 
+  at random (MAR). When missingness depends on time but not the hidden states, 
+  a model which only allows for state-dependent missingness is biased, whilst a 
+  model that allows for both state- and time-dependent missingness is not. 
+  Overall, these results show that modelling missingness as state-dependent, 
+  and including other relevant covariates, is a useful strategy in applications 
+  of hidden Markov models to time-series with missing data. We conclude with an 
+  application of the state- and time-dependent MNAR hidden Markov model to a 
+  real dataset, involving severity of schizophrenic symptoms in a clinical 
+  trial.
+classoption: 12pt
+output:
+  rticles::asa_article:
+    includes:
+      in_header: preamble.tex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+library(kableExtra)
+library(reshape2)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(depmixS4)
+```
+
+# Introduction
+
+There is relatively little work on dealing with missing data in hidden Markov models. @albert2000transitional, @deltour1999stochastic, and @yeh2010estimating consider missing data in observed Markov chains. @paroli2002parameter consider calculation of the likelihood of a Gaussian hidden Markov model when observations are missing at random. @yeh2012intermittent discuss the impact of ignoring missingness when missing data is, and is not, ignorable. They show that if missingness depends on the hidden states, i.e. missingness is state-dependent, this results in biased parameter estimates when this missingness is ignored. However, they offer no solution to this problem. The objective of this paper is to do so. Our approach is related to the work of @yu2003semimarkov who allowed for state-dependent missingness in a hidden semi-Markov model with discrete (categorical) outcomes. Following @bahl1983maximum, their solution is to code missingness into a special "null value" of the observed variable, effectively making the variable fully observed. Here, we instead model missingness with an additional (fully observed) indicator variable. This, we believe, is conceptually simpler, and makes it straightforward to add additional covariates to model the probability of missing values.
+
+The remainder of this paper is organized as follows: We start with a brief overview of hidden Markov models and the formal treatment of ignorable and non-ignorable missing data as established by @rubin1976inference and @little2014statistical, with a focus on hidden Markov models. We then consider state-dependent missingness in hidden Markov models, and show in simulation studies how including a submodel for state-dependent missingness provides better estimates of the model parameters. When data is in fact missing at random, the model with state-dependent missingness is not fundamentally biased, although care must be taken to include relevant covariates, such as e.g. time. We conclude with an application of the method to a real dataset, involving severity of schizophrenic symptoms in a clinical trial.
+
+## Hidden Markov models
+
+Let $\obs_{1:\nT} = (\obs_1,\ldots,\obs_\nT)$ denote a time series of (possibly multivariate) observations, and let $\modpar$ denote a vector of parameters. A hidden Markov model associates observations with a time series of hidden (or latent) discrete states $\state_{1:\nT} = (\state_1,\ldots,\state_\nT)$. It is assumed that each state $\state_t \in \{1, \ldots, \ns\}$ depends only on the immediately preceding state $\state_{1-t}$, and that, conditional upon the hidden states, the observations $\obs_t$ are independent:
+\begin{align}
+		\Prob(\state_{t}|\state_{1:t-1},\modpar) &= 
+		\Prob(\state_{t}|\state_{t-1},\modpar), \quad t=2, 3, \ldots, \nT
+		\label{eq:hmmstates}
+		\\ \dens(\obs_{t}|\state_{1:t-1}, \obs_{1:t-1} ,\modpar) &= 
+		\dens(\obs_{t}|\state_{t}, \modpar), \quad t=1,2, \ldots, \nT .
+		\label{eq:hmmresponses}
+\end{align}
+Making use of these conditional independencies, the
+joint distribution of observations and states can be stated as
+\begin{equation}
+\dens(\obs_{1:\nT}, \state_{1:\nT}|\modpar) = \Prob(\state_1|\modpar) \dens(\obs_1 | \state_1, \modpar) \prod_{t=2}^{\nT} 
+\Prob(\state_t|\state_{t-1},\modpar) \dens(\obs_t|\state_t,\modpar) .
+\label{eq:gHMM_joint}
+\end{equation}
+The likelihood function (i.e. the marginal distribution of the observations as a function of the model parameters) can then be written as
+\begin{equation}
+\label{eq:marginal_observation_dist}
+L(\modpar|\obs_{1:T}) = 
+\sum_{\fstate_{1:\nT} \in \mathcal{S}^T} \dens(\obs_{1:\nT}, \state_{1:\nT} = \fstate_{1:\nT} |\modpar) ,
+\end{equation}
+where the summation is over all possible state sequences (i.e. $\mathcal{S}^T$ is the set of all possible sequences of states). Rather than actually summing over all possible state sequences, the forward-backward algorithm [@Rabiner1989] is used to efficiently calculate this likelihood. For more information on hidden Markov models, see also @visser2021hidden.
+
+## Missing data
+
+The canonical references for statistical inference with missing data are @rubin1976inference and @little2014statistical. Here we summarise the main ideas and results from those sources, as relevant to the present topic. 
+
+Let $\obs_{1:\nT}$, the sequence of all response variables, be partitioned into a set of observed values, $\mathcal{\obs}_{\text{obs}} \subseteq \obs_{1:\nT}$, and a set of missing values, $\mathcal{\obs}_{\text{miss}} \subseteq \obs_{1:\nT}$. Let $M_{1:\nT}$ be vector of indicator variables with values $M_t = 1$ if $\obs_t \in \mathcal{\obs}_{\text{miss}}$ (the observation at time $t$ is missing), and $M_t = 0$ otherwise. In addition to $\modpar$, the parameters of the hidden Markov model for the observed data $\obs$, let $\gvc{\phi}$ denote the parameter vector of the statistical model of missingness (i.e. the model of $M_{1:\nT}$).
+
+We can define the "full" likelihood function as
+\begin{equation}
+\label{eq:joint_missing_likelihood}
+L_\text{full}{(\modpar,\gvc{\phi}|\mathcal{\obs}_{\text{obs}},M_{1:\nT})} \propto \int \dens{(\mathcal{\obs}_{\text{obs}},\mathcal{\obs}_{\text{miss}}|\modpar)} \dens{(M_{1:\nT}|\mathcal{\obs}_{\text{obs}},\mathcal{\obs}_{\text{miss}},\gvc{\phi})} d \mathcal{\obs}_\text{miss} ,
+\end{equation}
+that is, as any function proportional to $\dens(\mathcal{\obs}_{\text{obs}},M_{1:\nT}|\modpar,\gvc{\phi})$. Note that this is a marginal
+density, hence the integration over all possible values of the missing data. In this general case, we allow missingness to depend on the “complete” data $\obs_{1:\nT}$, so including the missing values $\mathcal{Y}_\text{miss}$ (for instance, it might be the case that missing values occur when the true value of $\obs_t$ is relatively high).
+
+Ignoring the missing data, the likelihood can be defined as
+\begin{equation}
+\label{eq:ignoring_missing_likelihood}
+L_\text{ign}(\modpar|\mathcal{\obs}_{\text{obs}}) \propto \dens(\mathcal{\obs}_{\text{obs}}|\modpar) ,
+\end{equation}
+that is, as any function proportional to $\dens(\mathcal{\obs}_\text{obs}|\modpar)$. An important question is when inference for $\modpar$ based on (\ref{eq:joint_missing_likelihood}) and (\ref{eq:ignoring_missing_likelihood}) give the same results. Note that both likelihood functions need only be known up to a constant of proportionality as only relative likelihoods need to be known for maximizing the likelihood or computing likelihood ratio's. The question is thus when (\ref{eq:ignoring_missing_likelihood}) is proportional to (\ref{eq:joint_missing_likelihood}). 
+
+As shown by @rubin1976inference, inference on $\modpar$ based on (\ref{eq:joint_missing_likelihood}) and (\ref{eq:ignoring_missing_likelihood}) will give identical results when (1) $\modpar$ and $\gvc{\phi}$ are separable (i.e. the joint parameter space is the product of the parameter space for $\modpar$ and $\gvc{\phi}$), and (2) the following holds:
+\begin{equation}
+\label{eq:MAR_definition}
+\dens(M_{1:\nT}|\mathcal{\obs}_{\text{obs}},\mathcal{\obs}_{\text{miss}},\gvc{\phi}) = \dens(M_{1:\nT}|\mathcal{\obs}_{\text{obs}},\gvc{\phi}) \quad \quad \text{for all } \mathcal{\obs}_{\text{miss}}, \gvc{\phi}, 
+\end{equation}
+i.e. whether data is missing does not depend on the missing values. In this case, data is said to be missing at random (MAR), and the joint density can be factored as
+\begin{align*}
+\dens{(\mathcal{\obs}_{\text{obs}},M_{1:\nT}|\modpar,\gvc{\phi})} &= \dens{(M_{1:\nT}|\mathcal{\obs}_{\text{obs}},\gvc{\phi})} \times \int \dens{(\mathcal{\obs}_{\text{obs}},\mathcal{\obs}_{\text{miss}}|\modpar)}  d \mathcal{\obs}_\text{miss} \\
+&= \dens{(M_{1:\nT}|\mathcal{\obs}_{\text{obs}},\gvc{\phi})} \times \dens(\mathcal{\obs}_{\text{obs}}|\modpar) ,
+\end{align*}
+which indicates that, as a function of $\modpar$, $L_\text{full}(\modpar,\gvc{\phi}|\mathcal{\obs}_\text{obs},M_{1:\nT}) \propto L_\text{ign}(\modpar|\mathcal{\obs}_\text{obs})$. Hence, when data is MAR, the missing data, and the mechanism leading to it, can be ignored in inference for $\modpar$. 
+A special case of MAR is data which is "missing completely at random" (MCAR), where
+\begin{equation}
+\label{eq:MCAR_definition}
+\dens(M_{1:\nT}|\mathcal{\obs}_{\text{obs}},\mathcal{\obs}_{\text{miss}},\gvc{\phi}) = \dens(M_{1:\nT}|\gvc{\phi}) .
+\end{equation}
+
+When the equality in (\ref{eq:MAR_definition}) does not hold, data is said to be missing not at random (MNAR). In this case,  ignoring the missing data will generally lead to biased parameter estimates of $\theta$. Valid inference of $\theta$ requires working with the full likelihood function of (\ref{eq:joint_missing_likelihood}), so explicitly accounting for missingness.
+
+## Missing data in hidden Markov models
+
+Hidden Markov models by definition include missing data, as the hidden states are unobservable (i.e. always missing). When there are no missing values for the observed variable $\obs$, it is easy to see that inference on $\modpar$ in HMMs targets the correct likelihood. Replacing $\mathcal{\obs}_{\text{miss}}$ by $\state_{1:\nT}$, and noting that $\Prob(M_{1:\nT}|\mathcal{\obs}_{\text{obs}},\state_{1:\nT}) = \Prob(M_{1:\nT}) = 1$, the missing states can be considered missing completely at random (MCAR).
+
+We will now focus on the case where the observable response variable $\obs$ does have missing values. The full likelihood, which also depends on the hidden states, can be defined as
+\begin{equation}
+L_\text{full}(\modpar,\gvc{\phi}|\mathcal{\obs}_{\text{obs}},M_{1:\nT}) \propto \sum_{\fstate_{1:\nT} \in \mathcal{S}^\nT} \int \dens{(\mathcal{\obs}_{\text{obs}},\mathcal{\obs}_{\text{miss}}, \fstate_{1:\nT} |\modpar)} \dens{(M_{1:\nT}|\mathcal{\obs}_{\text{obs}},\mathcal{\obs}_{\text{miss}},\fstate_{1:\nT},\gvc{\phi})} d \mathcal{\obs}_\text{miss} ,
+\end{equation}
+while the likelihood ignoring missing data as
+\begin{equation}
+L_\text{ign}(\modpar|\mathcal{\obs}_{\text{obs}}) \propto \sum_{\fstate_{1:\nT} \in \mathcal{S}^\nT}  \dens{(\mathcal{\obs}_{\text{obs}}, \fstate_{1:\nT} |\modpar)} .
+\end{equation}
+
+### Missing at random (MAR)
+
+When the data is missing at random (\ref{eq:MAR_definition}), then
+\begin{align}
+\notag L_\text{full}(\modpar,\gvc{\phi}|\mathcal{\obs}_{\text{obs}},M_{1:\nT}) &\propto
+\sum_{\fstate_{1:\nT} \in \mathcal{S}^\nT} \int \dens{(\mathcal{\obs}_{\text{obs}},\mathcal{\obs}_{\text{miss}}, \fstate_{1:\nT} |\modpar)} \dens{(M_{1:\nT}|\mathcal{\obs}_{\text{obs}},\gvc{\phi})} d \mathcal{\obs}_\text{miss} \\
+\label{eq:HMM_mss_lik} &= \dens{(M_{1:\nT}|\mathcal{\obs}_{\text{obs}}, \gvc{\phi})} \times \left( \sum_{\fstate_{1:\nT} \in \mathcal{S}^\nT} \int \dens{(\mathcal{\obs}_{\text{obs}},\mathcal{\obs}_{\text{miss}}, \fstate_{1:\nT} |\modpar)} d \mathcal{\obs}_\text{miss} \right)
+\end{align}
+and hence missingness is ignorable in inference of $\modpar$. Furthermore, defining
+\begin{align}
+\notag \dens^*(\obs_t|\state_t,\modpar) &= \mathbb{I}_{\obs_t \in \mathcal{\obs}_{\text{obs}}} \dens(\obs_t | \state_t, \modpar) + \mathbb{I}_{\obs_t \in \mathcal{\obs}_{\text{miss}}} \int \dens(\obs_t | \state_t, \modpar) d \obs_t \\ 
+&= \mathbb{I}_{\obs_t \in \mathcal{\obs}_{\text{obs}}} \dens(\obs_t | \state_t, \modpar) + \mathbb{I}_{\obs_t \in \mathcal{\obs}_{\text{miss}}} \times 1 ,
+\end{align}
+where the indicator variable $\mathbb{I}_x = 1$ if condition $x$ is true and 0 otherwise, 
+we can write the part of the full likelihood (\ref{eq:HMM_mss_lik}) relevant to inference on $\modpar$ as
+\begin{align*}
+\sum_{\fstate_{1:\nT} \in \mathcal{S}^\nT} \int \dens( \mathcal{\obs}_{\text{obs}},\mathcal{\obs}_{\text{miss}}, \fstate_{1:\nT} | \modpar) d \mathcal{\obs}_{\text{miss}} &= \Prob(\state_1|\modpar) \dens^*(\obs_1 | \state_1, \modpar)  \prod_{t=2}^{\nT} 
+\Prob(\state_t|\state_{t-1},\modpar) \dens^*(\obs_t|\state_t,\modpar) ,
+\end{align*}
+which shows that a principled way to deal with missing observations is to set $\dens(\obs_t|\state_t) = 1$ for all $\obs_t \in \mathcal{\obs}_\text{miss}$. Note that it is necessary to include time points with missing observations in this way to allow the state probabilities to be computed properly. <!-- Note that this result applies also to the case where $\obs$ is MCAR.--> While this result is known [e.g. @zucchini2017hidden], we have not come across its derivation in the form above. 
+
+### State-dependent missingness (MNAR)
+
+If data is not MAR, there is some dependence between whether observations are missing or not, and the true unobserved values. There are many forms this dependence can take, and modelling the dependence accurately may require substantial knowledge of the domain to which the data applies. Here, we take a pragmatic approach, and model this dependence through the hidden states. That is, we assume $M$ and $\obs$ are conditionally independent, given the hidden states:
+\begin{equation*}
+\dens{(M_t, \obs_t|\state_t)} = \dens{(M_t|\state_t)} \dens{(\obs_t|\state_t)} .
+\end{equation*}
+This is not an overly restrictive assumption, as the number of hidden states can be chosen to allow for intricate patterns of (marginal) dependence between $M$ and $\obs$ at a single time point, as well as over time. For example, increased probability of missingness for high values of $\obs$ can be captured through a state which is simultaneously associated with high values of $\obs$ and a high probability of $M=1$. A high probability of a missing observation at $t+1$ _after_ a high (observed) value of $\obs_t$ can be captured with a state $s$ associated with high values of $\obs$, a state $s' \neq s$ associated with a high probability of $M=1$, and a high transition probability $P(S_{t+1} = s'|S_{t} = s)$.
+<!-- state-space can be expanded (i.e. the number of unique hidden states increased) to allow for intricate patterns of (marginal) dependence between $M$ and $\obs$.--> 
+
+Under the assumption that missingness depends only on the hidden states:
+\begin{equation*}
+\dens{(M_{1:\nT}|\mathcal{\obs}_{\text{obs}},\mathcal{\obs}_{\text{miss}},\state_{1:\nT},\gvc{\phi})} = \dens{(M_{1:\nT}|\state_{1:\nT},\gvc{\phi})} ,
+\end{equation*}
+the full likelihood becomes
+\begin{align*}
+L_\text{full}(\modpar,\gvc{\phi}|\mathcal{\obs}_{\text{obs}},M_{1:\nT}) &\propto \sum_{\fstate_{1:\nT} \in \mathcal{S}^\nT} \int \dens{(\mathcal{\obs}_{\text{obs}},\mathcal{\obs}_{\text{miss}}, \fstate_{1:\nT} |\modpar)} \dens{(M_{1:\nT}|\mathcal{\obs}_{\text{obs}},\mathcal{\obs}_{\text{miss}},\fstate_{1:\nT},\gvc{\phi})} d \mathcal{\obs}_\text{miss} \\
+&= \sum_{\fstate_{1:\nT} \in \mathcal{S}^\nT}  \dens{(M_{1:\nT}|\fstate_{1:\nT},\gvc{\phi})} \times \int \dens{(\mathcal{\obs}_{\text{obs}},\mathcal{\obs}_{\text{miss}}, \fstate_{1:\nT} |\modpar)} d \mathcal{\obs}_\text{miss} \\
+&= \sum_{\fstate_{1:\nT} \in \mathcal{S}^\nT}  \dens{(M_{1:\nT}|\fstate_{1:\nT},\gvc{\phi})} \times \dens{(\mathcal{\obs}_{\text{obs}}, \fstate_{1:\nT} |\modpar)} .
+\end{align*}
+This shows that, although $M$ does not directly depend on $\mathcal{\obs}_\text{miss}$, because both $M$ and $Y$ depend on $\state$, the role of the $\dens{(M|\state,\gvc{\phi})}$ term is more than a scaling factor in the likelihood, and hence missingness is not ignorable.
+
+## Overview
+
+When data is MNAR and missingness is not ignorable, valid inference on $\modpar$ requires including a submodel for $M$ in the overall model. That is, the HMM should be for multivariate data $\obs$ and $M$. The objective of the present paper is to show the potential benefits of including a relatively simple model for $M$ in hidden Markov models, by assuming missingness is state-dependent. We provide results from a simulation study, as well as an example with real data. The simulations assess the accuracy of parameter estimates and state recovery in situations where missingness is MAR or MNAR and dependent on the hidden state, in situations where the state-conditional distributions of the observations are relatively well separated or more overlapping. We then discuss a situation where missingness is time-dependent (but not state-dependent). This is a situation where missingness is in fact MCAR, and where a misspecified model which assumes missingness is state-dependent may lead to biased results. Finally, we apply the models to a real data example, involving a clinical trial comparing the effect of real and placebo medication on the severity of schizophrenic symptoms. 
+
+# Simulation study
+
+```{r simulation-settings, echo=FALSE}
+nsim <- 1000
+nrep <- 100
+nt <- 50
+```
+
+```{r simulation-response-distributions, echo=FALSE, fig.cap="State-conditional response distributions in the simulation studies. In Simulation 1 and 2, states are reasonably well-separated, although there is still considerable overlap of the distributions. In Simulation 3 and 4, states less well-separated.", fig.width=8, fig.height=3, out.width="\\linewidth"}
+library(ggplot2)
+library(gridExtra)
+p1 <- ggplot() + geom_function(fun = dnorm, args = list(mean = -1, sd = 1)) + geom_function(fun = dnorm, args = list(mean = 0, sd = 1)) + geom_function(fun = dnorm, args = list(mean = 1, sd = 1)) + ggtitle("Simulation 1 and 2") + xlim(-6,6) + ylab("p(Y|S)") + xlab("") + theme_bw()
+p2 <- ggplot() + geom_function(fun = dnorm, args = list(mean = -1, sd = 3)) + geom_function(fun = dnorm, args = list(mean = 0, sd = 3)) + geom_function(fun = dnorm, args = list(mean = 1, sd = 3)) + ggtitle("Simulation 3 and 4") + xlim(-12,12) + ylab("p(Y|S)") + xlab("") + theme_bw()
+grid.arrange(p1, p2, ncol=2) 
+```
+
+To assess the potential benefits of including a state-dependent missingness model in a HMM, we conducted a simulation study, focussing on a three-state hidden Markov model with a univariate Normal distributed response variable^[All code for the simulations, and the analysis of the application, is available at https://github.com/depmix/hmm-missing-data-paper.]. We simulated four scenario's. In Simulation 1 and 2 (Figure \ref{fig:simulation-response-distributions}), the states are reasonably well-separated, with means $\mu_1 = -1$, $\mu_2 = 0$, $\mu_3 = 1$ and standard deviations $\sigma_1 = \sigma_2 = \sigma_3 = 1$. Note that there is still considerable overlap in the state-conditional response distributions, as would be expected in many real applications of HMMs. In Simulation 1, missingness was state-dependent (i.e. MNAR), with $\Prob(M_t = 1|S_t = 1) = .05$, $\Prob(M_t = 1|S_t = 2) = .25$, and $\Prob(M_t = 1|S_t = 2) = .5$. In Simulation 2, missingness was independent of the state (MAR), with $\Prob(M_t = 1|S_t = i) = \Prob(M_t = 1) = .25$. In Simulation 3 and 4 (Figure \ref{fig:simulation-response-distributions}), the states were rather less well-separated, with means as for Simulation 1 and 2, but standard deviations $\sigma_i = 3$. Here, the overlap of the state-conditional response distributions is much higher than in Simulation 1 and 2, and identification of the hidden states will be more difficult. In Simulation 3, missingness was state-dependent (MNAR) in the same manner as Simulation 1, while in Simulation 4, missingness was state-independent (MAR) as for Simulation 2. In all simulations, the initial state probabilities were $\pi_1 = \Prob(S_1 = 1) = .8$, $\pi_2 = \pi_3 = .1$, and the state-transition matrix was
+\begin{equation*}
+\mat{A} = \left[ \begin{matrix} .75 &  .125 & .125 \\ .125 & .75 & .125 \\ .125 & .125 & .75
+\end{matrix} \right] .
+\end{equation*}
+In each simulation, we simulated a total of `r nsim` data sets, each consisting of $\no = `r nrep`$ replications of a time-series of length $\nT = `r nt`$. We denote observations in such replicated time series as $\obs_{i,t}$, with $i=1,\ldots,\no$ and $t = 1, \ldots, \nT$. Data was generated according to a 3-state hidden Markov model. For MAR cases, the non-missing observations are distributed as
+\begin{equation}
+\label{eq:MAR-distribution}
+\dens(\obs_{i,t}|\state_{i,t} = j) = \mathbf{Normal}(\obs_{i,t}|\mu_j,\sigma_j) .
+\end{equation}
+In the MNAR cases, the missingness variable $M$ and the response variable $\obs$ were conditionally independent given the hidden state:
+\begin{equation}
+\label{eq:MNAR-distribution}
+\dens(\obs_{i,t},M_{i,t}|\state_{i,t} = j) = \mathbf{Bernouilli}(M_{i,t}|\phi_j) \times \mathbf{Normal}(\obs_{i,t}|\mu_j,\sigma_j)
+\end{equation}
+Data sets were simulated by first generating the hidden state sequences $\state_{i,1:\nT}$ according to the initial state and transition probabilities. Then, the observations $\obs_{i,1:\nT}$ were sampled according to the state-conditional distributions $\dens(\obs_{i,t}|\state_{i,t})$. Finally, random observations were set to missing values according to the missingness distributions $\Prob(M_{i,t}|\state_{i,t})$.
+
+We fitted two 3-state hidden Markov models to each data-set. In the MAR models, observed responses were assumed to be distributed according to (\ref{eq:MAR-distribution}), and in the MNAR models, the observed responses and missingness indicators were assumed to be distributed according to (\ref{eq:MNAR-distribution}). Parameters were estimated by maximum likelihood, using the Expectation-Maximisation algorithm, as implemented in depmixS4 [@depmixS4]. To speed up convergence, starting values were set to the true parameter values. Although such initialization is obviously not possible in real applications, we are interested in the quality of parameter estimates at the global maximum likelihood solution, and setting starting values to the true parameters makes it more likely to arrive at the global maximum. In real applications, one would need to use a sufficient number of randomly generated starting values to find the global maximum.
+
+```{r simulation-data, echo=FALSE, message=FALSE, cache=TRUE}
+load("simulation1.Rdata")
+sim1 <- out
+load("simulation2.Rdata")
+sim2 <- out
+load("simulation3.Rdata")
+sim3 <- out
+load("simulation4.Rdata")
+sim4 <- out
+load("simulation5.Rdata")
+sim5 <- out
+
+# simulation 1
+prior <- c(8,1,1)
+prior <- prior/sum(prior)
+transition <- 5*diag(3) + 1
+transition <- transition/rowSums(transition)
+means <- c(-1,0,1)
+sds <- c(1,1,1)
+pmiss <- c(.05,.25,.5)
+#
+truepars1 <- c(prior,transition,as.numeric(rbind(means,sds)))
+truepars2 <- c(prior,transition,as.numeric(rbind(means,sds,1-pmiss,pmiss)))
+
+bias1 <- matrix(0.0,ncol=length(truepars1),nrow=nsim)
+bias2 <- matrix(0.0,ncol=length(truepars2),nrow=nsim)
+
+colnames(bias1) <- names(sim1[[1]][[1]][[1]])
+colnames(bias2) <- names(sim1[[1]][[2]][[1]])
+
+pcorstate1 <- rep(0.0,nsim)
+pcorstate2 <- rep(0.0,nsim)
+
+#
+for(sim in 1:nsim) {
+  tmp <- sim1[[sim]][[1]][[1]]
+  pr <- tmp[1:3]
+  trt <- matrix(tmp[4:12],ncol=3)
+  ms <- tmp[c(13,15,17)]
+  sds <- tmp[c(14,16,18)] 
+  ord <- order(ms)
+  bias1[sim,] <- c(pr[ord],trt[ord,ord],as.numeric(rbind(ms[ord],sds[ord]))) - truepars1
+  fsta <- recode(sim1[[sim]][[1]]$viterbi,`1` = which(ord == 1), `2` = which(ord == 2), `3` = which(ord == 3))
+  pcorstate1[sim] <- sum(fsta == sim1[[sim]][[1]]$trueState)/(nrep*nt)
+    
+  tmp <- sim1[[sim]][[2]][[1]]
+  pr <- tmp[1:3]
+  trt <- matrix(tmp[4:12],ncol=3)
+  ms <- tmp[c(13,17,21)]
+  sds <- tmp[c(14,18,22)]
+  ps0 <- tmp[c(15,19,23)]
+  ps1 <- tmp[c(16,20,24)]
+  ord <- order(ms)
+  bias2[sim,] <- c(pr[ord],trt[ord,ord],as.numeric(rbind(ms[ord],sds[ord],ps0[ord],ps1[ord]))) - truepars2
+  fsta <- recode(sim1[[sim]][[2]]$viterbi,`1` = which(ord == 1), `2` = which(ord == 2), `3` = which(ord == 3))
+  pcorstate2[sim] <- sum(fsta == sim1[[sim]][[2]]$trueState)/(nrep*nt)
+}
+sim1_bias1 <- bias1
+sim1_bias2 <- bias2
+sim1_est1 <- t(t(bias1) + truepars1)
+sim1_est2 <- t(t(bias2) + truepars2)
+sim1_pcorstate1 <- pcorstate1
+sim1_pcorstate2 <- pcorstate2
+
+tmp <- as.data.frame(sim1_est1)
+colnames(tmp) <- c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","$\\mu_2$","$\\sigma_2$","$\\mu_3$","$\\sigma_3$")
+tmp$sim <- 1:nsim
+tmp <- gather(tmp,key="param",value="estimate",-sim)
+tmp$true <- rep(truepars1,each=nsim)
+tmp$method <- "MAR"
+tmp$variance <- "low"
+tmp$missing <- "unequal"
+sim1_est1_long <- tmp
+
+tmp <- as.data.frame(sim1_est2)
+colnames(tmp) <- c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","pnm_1","$p(M=1|S=1)$","$\\mu_2$","$\\sigma_2$","pnm_2","$p(M=1|S=2)$","$\\mu_3$","$\\sigma_3$","pnm_3","$p(M=1|S=3)$")
+tmp$sim <- 1:nsim
+tmp <- gather(tmp,key="param",value="estimate",-sim)
+tmp$true <- rep(truepars2,each=nsim)
+tmp$method <- "MNAR"
+tmp$variance <- "low"
+tmp$missing <- "unequal"
+sim1_est2_long <- tmp
+
+# simulation 2
+prior <- c(8,1,1)
+prior <- prior/sum(prior)
+transition <- 5*diag(3) + 1
+transition <- transition/rowSums(transition)
+means <- c(-1,0,1)
+sds <- c(1,1,1)
+pmiss <- c(.25,.25,.25)
+#
+truepars1 <- c(prior,transition,as.numeric(rbind(means,sds)))
+truepars2 <- c(prior,transition,as.numeric(rbind(means,sds,1-pmiss,pmiss)))
+
+bias1 <- matrix(0.0,ncol=length(truepars1),nrow=nsim)
+bias2 <- matrix(0.0,ncol=length(truepars2),nrow=nsim)
+
+colnames(bias1) <- names(sim3[[1]][[1]][[1]])
+colnames(bias2) <- names(sim3[[1]][[2]][[1]])
+
+pcorstate1 <- rep(0.0,nsim)
+pcorstate2 <- rep(0.0,nsim)
+
+simi <- sim2
+#
+for(sim in 1:nsim) {
+  tmp <- simi[[sim]][[1]][[1]]
+  pr <- tmp[1:3]
+  trt <- matrix(tmp[4:12],ncol=3)
+  ms <- tmp[c(13,15,17)]
+  sds <- tmp[c(14,16,18)] 
+  ord <- order(ms)
+  bias1[sim,] <- c(pr[ord],trt[ord,ord],as.numeric(rbind(ms[ord],sds[ord]))) - truepars1
+  fsta <- recode(simi[[sim]][[1]]$viterbi,`1` = which(ord == 1), `2` = which(ord == 2), `3` = which(ord == 3))
+  pcorstate1[sim] <- sum(fsta == simi[[sim]][[1]]$trueState)/(nrep*nt)
+
+  tmp <- simi[[sim]][[2]][[1]]
+  pr <- tmp[1:3]
+  trt <- matrix(tmp[4:12],ncol=3)
+  ms <- tmp[c(13,17,21)]
+  sds <- tmp[c(14,18,22)]
+  ps0 <- tmp[c(15,19,23)]
+  ps1 <- tmp[c(16,20,24)]
+  ord <- order(ms)
+  bias2[sim,] <- c(pr[ord],trt[ord,ord],as.numeric(rbind(ms[ord],sds[ord],ps0[ord],ps1[ord]))) - truepars2
+  fsta <- recode(simi[[sim]][[2]]$viterbi,`1` = which(ord == 1), `2` = which(ord == 2), `3` = which(ord == 3))
+  pcorstate2[sim] <- sum(fsta == simi[[sim]][[2]]$trueState)/(nrep*nt)
+}
+sim2_bias1 <- bias1
+sim2_bias2 <- bias2
+sim2_est1 <- t(t(bias1) + truepars1)
+sim2_est2 <- t(t(bias2) + truepars2)
+sim2_pcorstate1 <- pcorstate1
+sim2_pcorstate2 <- pcorstate2
+
+tmp <- as.data.frame(sim2_est1)
+colnames(tmp) <- c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","$\\mu_2$","$\\sigma_2$","$\\mu_3$","$\\sigma_3$")
+tmp$sim <- 1:nsim
+tmp <- gather(tmp,key="param",value="estimate",-sim)
+tmp$true <- rep(truepars1,each=nsim)
+tmp$method <- "MAR"
+tmp$variance <- "low"
+tmp$missing <- "equal"
+sim2_est1_long <- tmp
+
+tmp <- as.data.frame(sim2_est2)
+colnames(tmp) <- c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","pnm_1","$p(M=1|S=1)$","$\\mu_2$","$\\sigma_2$","pnm_2","$p(M=1|S=2)$","$\\mu_3$","$\\sigma_3$","pnm_3","$p(M=1|S=3)$")
+tmp$sim <- 1:nsim
+tmp <- gather(tmp,key="param",value="estimate",-sim)
+tmp$true <- rep(truepars2,each=nsim)
+tmp$method <- "MNAR"
+tmp$variance <- "low"
+tmp$missing <- "equal"
+sim2_est2_long <- tmp
+
+# simulation 3
+prior <- c(8,1,1)
+prior <- prior/sum(prior)
+transition <- 5*diag(3) + 1
+transition <- transition/rowSums(transition)
+means <- c(-1,0,1)
+sds <- c(3,3,3)
+pmiss <- c(.05,.25,.5)
+#
+truepars1 <- c(prior,transition,as.numeric(rbind(means,sds)))
+truepars2 <- c(prior,transition,as.numeric(rbind(means,sds,1-pmiss,pmiss)))
+
+bias1 <- matrix(0.0,ncol=length(truepars1),nrow=nsim)
+bias2 <- matrix(0.0,ncol=length(truepars2),nrow=nsim)
+
+colnames(bias1) <- names(sim2[[1]][[1]][[1]])
+colnames(bias2) <- names(sim2[[1]][[2]][[1]])
+
+pcorstate1 <- rep(0.0,nsim)
+pcorstate2 <- rep(0.0,nsim)
+
+simi <- sim3
+#
+for(sim in 1:nsim) {
+  tmp <- simi[[sim]][[1]][[1]]
+  pr <- tmp[1:3]
+  trt <- matrix(tmp[4:12],ncol=3)
+  ms <- tmp[c(13,15,17)]
+  sds <- tmp[c(14,16,18)] 
+  ord <- order(ms)
+  bias1[sim,] <- c(pr[ord],trt[ord,ord],as.numeric(rbind(ms[ord],sds[ord]))) - truepars1
+  fsta <- recode(simi[[sim]][[1]]$viterbi,`1` = which(ord == 1), `2` = which(ord == 2), `3` = which(ord == 3))
+  pcorstate1[sim] <- sum(fsta == simi[[sim]][[1]]$trueState)/(nrep*nt)
+
+  tmp <- simi[[sim]][[2]][[1]]
+  pr <- tmp[1:3]
+  trt <- matrix(tmp[4:12],ncol=3)
+  ms <- tmp[c(13,17,21)]
+  sds <- tmp[c(14,18,22)]
+  ps0 <- tmp[c(15,19,23)]
+  ps1 <- tmp[c(16,20,24)]
+  ord <- order(ms)
+  bias2[sim,] <- c(pr[ord],trt[ord,ord],as.numeric(rbind(ms[ord],sds[ord],ps0[ord],ps1[ord]))) - truepars2
+  fsta <- recode(simi[[sim]][[2]]$viterbi,`1` = which(ord == 1), `2` = which(ord == 2), `3` = which(ord == 3))
+  pcorstate2[sim] <- sum(fsta == simi[[sim]][[2]]$trueState)/(nrep*nt)
+}
+sim3_bias1 <- bias1
+sim3_bias2 <- bias2
+sim3_est1 <- t(t(bias1) + truepars1)
+sim3_est2 <- t(t(bias2) + truepars2)
+sim3_pcorstate1 <- pcorstate1
+sim3_pcorstate2 <- pcorstate2
+
+tmp <- as.data.frame(sim3_est1)
+colnames(tmp) <- c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","$\\mu_2$","$\\sigma_2$","$\\mu_3$","$\\sigma_3$")
+tmp$sim <- 1:nsim
+tmp <- gather(tmp,key="param",value="estimate",-sim)
+tmp$true <- rep(truepars1,each=nsim)
+tmp$method <- "MAR"
+tmp$variance <- "high"
+tmp$missing <- "unequal"
+sim3_est1_long <- tmp
+
+tmp <- as.data.frame(sim3_est2)
+colnames(tmp) <- c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","pnm_1","$p(M=1|S=1)$","$\\mu_2$","$\\sigma_2$","pnm_2","$p(M=1|S=2)$","$\\mu_3$","$\\sigma_3$","pnm_3","$p(M=1|S=3)$")
+tmp$sim <- 1:nsim
+tmp <- gather(tmp,key="param",value="estimate",-sim)
+tmp$true <- rep(truepars2,each=nsim)
+tmp$method <- "MNAR"
+tmp$variance <- "high"
+tmp$missing <- "unequal"
+sim3_est2_long <- tmp
+
+# simulation 4
+prior <- c(8,1,1)
+prior <- prior/sum(prior)
+transition <- 5*diag(3) + 1
+transition <- transition/rowSums(transition)
+means <- c(-1,0,1)
+sds <- c(3,3,3)
+pmiss <- c(.25,.25,.25)
+#
+truepars1 <- c(prior,transition,as.numeric(rbind(means,sds)))
+truepars2 <- c(prior,transition,as.numeric(rbind(means,sds,1-pmiss,pmiss)))
+
+bias1 <- matrix(0.0,ncol=length(truepars1),nrow=nsim)
+bias2 <- matrix(0.0,ncol=length(truepars2),nrow=nsim)
+
+colnames(bias1) <- names(sim4[[1]][[1]][[1]])
+colnames(bias2) <- names(sim4[[1]][[2]][[1]])
+
+pcorstate1 <- rep(0.0,nsim)
+pcorstate2 <- rep(0.0,nsim)
+
+simi <- sim4
+#
+for(sim in 1:nsim) {
+  tmp <- simi[[sim]][[1]][[1]]
+  pr <- tmp[1:3]
+  trt <- matrix(tmp[4:12],ncol=3)
+  ms <- tmp[c(13,15,17)]
+  sds <- tmp[c(14,16,18)] 
+  ord <- order(ms)
+  bias1[sim,] <- c(pr[ord],trt[ord,ord],as.numeric(rbind(ms[ord],sds[ord]))) - truepars1
+  fsta <- recode(simi[[sim]][[1]]$viterbi,`1` = which(ord == 1), `2` = which(ord == 2), `3` = which(ord == 3))
+  pcorstate1[sim] <- sum(fsta == simi[[sim]][[1]]$trueState)/(nrep*nt)
+
+  tmp <- simi[[sim]][[2]][[1]]
+  pr <- tmp[1:3]
+  trt <- matrix(tmp[4:12],ncol=3)
+  ms <- tmp[c(13,17,21)]
+  sds <- tmp[c(14,18,22)]
+  ps0 <- tmp[c(15,19,23)]
+  ps1 <- tmp[c(16,20,24)]
+  ord <- order(ms)
+  bias2[sim,] <- c(pr[ord],trt[ord,ord],as.numeric(rbind(ms[ord],sds[ord],ps0[ord],ps1[ord]))) - truepars2
+  fsta <- recode(simi[[sim]][[2]]$viterbi,`1` = which(ord == 1), `2` = which(ord == 2), `3` = which(ord == 3))
+  pcorstate2[sim] <- sum(fsta == simi[[sim]][[2]]$trueState)/(nrep*nt)
+}
+sim4_bias1 <- bias1
+sim4_bias2 <- bias2
+sim4_est1 <- t(t(bias1) + truepars1)
+sim4_est2 <- t(t(bias2) + truepars2)
+sim4_pcorstate1 <- pcorstate1
+sim4_pcorstate2 <- pcorstate2
+
+tmp <- as.data.frame(sim4_est1)
+colnames(tmp) <- c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","$\\mu_2$","$\\sigma_2$","$\\mu_3$","$\\sigma_3$")
+tmp$sim <- 1:nsim
+tmp <- gather(tmp,key="param",value="estimate",-sim)
+tmp$true <- rep(truepars1,each=nsim)
+tmp$method <- "MAR"
+tmp$variance <- "high"
+tmp$missing <- "equal"
+sim4_est1_long <- tmp
+
+tmp <- as.data.frame(sim4_est2)
+colnames(tmp) <- c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","pnm_1","$p(M=1|S=1)$","$\\mu_2$","$\\sigma_2$","pnm_2","$p(M=1|S=2)$","$\\mu_3$","$\\sigma_3$","pnm_3","$p(M=1|S=3)$")
+tmp$sim <- 1:nsim
+tmp <- gather(tmp,key="param",value="estimate",-sim)
+tmp$true <- rep(truepars2,each=nsim)
+tmp$method <- "MNAR"
+tmp$variance <- "high"
+tmp$missing <- "equal"
+sim4_est2_long <- tmp
+
+# simulation 5
+prior <- c(8,1,1)
+prior <- prior/sum(prior)
+transition <- 5*diag(3) + 1
+transition <- transition/rowSums(transition)
+means <- c(-1,0,1)
+sds <- c(1,1,1)
+pmiss <- rep(mean(1/(1+exp(-(-5 + .125*1:50)))),3)
+#
+truepars1 <- c(prior,transition,as.numeric(rbind(means,sds)))
+truepars2 <- c(prior,transition,as.numeric(rbind(means,sds,1-pmiss,pmiss)))
+truepars3 <- c(prior,transition,as.numeric(rbind(means,sds,c(-5,-5,-5),c(.125,.125,.125))))
+
+bias1 <- matrix(0.0,ncol=length(truepars1),nrow=nsim)
+bias2 <- matrix(0.0,ncol=length(truepars2),nrow=nsim)
+bias3 <- matrix(0.0,ncol=length(truepars3),nrow=nsim)
+
+colnames(bias1) <- names(sim1[[1]][[1]][[1]])
+colnames(bias2) <- names(sim1[[1]][[2]][[1]])
+colnames(bias3) <- names(sim1[[1]][[3]][[1]])
+
+pcorstate1 <- rep(0.0,nsim)
+pcorstate2 <- rep(0.0,nsim)
+pcorstate3 <- rep(0.0,nsim)
+
+simi <- sim5
+#
+for(sim in 1:nsim) {
+  tmp <- simi[[sim]][[1]][[1]]
+  pr <- tmp[1:3]
+  trt <- matrix(tmp[4:12],ncol=3)
+  ms <- tmp[c(13,15,17)]
+  sds <- tmp[c(14,16,18)] 
+  ord <- order(ms)
+  bias1[sim,] <- c(pr[ord],trt[ord,ord],as.numeric(rbind(ms[ord],sds[ord]))) - truepars1
+  fsta <- recode(simi[[sim]][[1]]$viterbi,`1` = which(ord == 1), `2` = which(ord == 2), `3` = which(ord == 3))
+  pcorstate1[sim] <- sum(fsta == simi[[sim]][[1]]$trueState)/(nrep*nt)
+
+  tmp <- simi[[sim]][[2]][[1]]
+  pr <- tmp[1:3]
+  trt <- matrix(tmp[4:12],ncol=3)
+  ms <- tmp[c(13,17,21)]
+  sds <- tmp[c(14,18,22)]
+  ps0 <- tmp[c(15,19,23)]
+  ps1 <- tmp[c(16,20,24)]
+  ord <- order(ms)
+  bias2[sim,] <- c(pr[ord],trt[ord,ord],as.numeric(rbind(ms[ord],sds[ord],ps0[ord],ps1[ord]))) - truepars2
+  fsta <- recode(simi[[sim]][[2]]$viterbi,`1` = which(ord == 1), `2` = which(ord == 2), `3` = which(ord == 3))
+  pcorstate2[sim] <- sum(fsta == simi[[sim]][[2]]$trueState)/(nrep*nt)
+
+  tmp <- simi[[sim]][[3]][[1]]
+  pr <- tmp[1:3]
+  trt <- matrix(tmp[4:12],ncol=3)
+  ms <- tmp[c(13,17,21)]
+  sds <- tmp[c(14,18,22)]
+  ps0 <- tmp[c(15,19,23)]
+  ps1 <- tmp[c(16,20,24)]
+  ord <- order(ms)
+  bias3[sim,] <- c(pr[ord],trt[ord,ord],as.numeric(rbind(ms[ord],sds[ord],ps0[ord],ps1[ord]))) - truepars3
+  fsta <- recode(simi[[sim]][[3]]$viterbi,`1` = which(ord == 1), `2` = which(ord == 2), `3` = which(ord == 3))
+  pcorstate3[sim] <- sum(fsta == simi[[sim]][[3]]$trueState)/(nrep*nt)
+}
+sim5_bias1 <- bias1
+sim5_bias2 <- bias2
+sim5_bias3 <- bias3
+sim5_est1 <- t(t(bias1) + truepars1)
+sim5_est2 <- t(t(bias2) + truepars2)
+sim5_est3 <- t(t(bias3) + truepars3)
+sim5_pcorstate1 <- pcorstate1
+sim5_pcorstate2 <- pcorstate2
+sim5_pcorstate3 <- pcorstate3
+
+tmp <- as.data.frame(sim5_est1)
+colnames(tmp) <- c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","$\\mu_2$","$\\sigma_2$","$\\mu_3$","$\\sigma_3$")
+#tmp$pcorstate <- sim5_pcorstate1
+tmp$sim <- 1:nsim
+tmp <- gather(tmp,key="param",value="estimate",-sim)
+tmp$true <- rep(truepars1,each=nsim)
+tmp$method <- "MAR"
+tmp$variance <- "low"
+tmp$missing <- "time"
+sim5_est1_long <- tmp
+
+tmp <- as.data.frame(sim5_est2)
+colnames(tmp) <- c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","pnm_1","$p(M=1|S=1)$","$\\mu_2$","$\\sigma_2$","pnm_2","$p(M=1|S=2)$","$\\mu_3$","$\\sigma_3$","pnm_3","$p(M=1|S=3)$")
+#tmp$pcorstate <- sim5_pcorstate2
+tmp$sim <- 1:nsim
+tmp <- gather(tmp,key="param",value="estimate",-sim)
+tmp$true <- rep(truepars2,each=nsim)
+tmp$method <- "MNAR"
+tmp$variance <- "low"
+tmp$missing <- "time"
+sim5_est2_long <- tmp
+
+tmp <- as.data.frame(sim5_est3)
+colnames(tmp) <- c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","$\\beta_{0,1}$","$\\beta_{\\text{time},1}$", "$\\mu_2$","$\\sigma_2$","$\\beta_{0,2}$","$\\beta_{\\text{time},2}$","$\\mu_3$","$\\sigma_3$","$\\beta_{0,3}$","$\\beta_{\\text{time},3}$")
+#tmp$pcorstate <- sim5_pcorstate3
+tmp$sim <- 1:nsim
+tmp <- gather(tmp,key="param",value="estimate",-sim)
+tmp$true <- rep(truepars3,each=nsim)
+tmp$method <- "MNAR_time"
+tmp$variance <- "low"
+tmp$missing <- "time"
+sim5_est3_long <- tmp
+
+all_long <- rbind(
+  sim1_est1_long,
+  subset(sim1_est2_long,!(param %in% c("pnm_1","pnm_2","pnm_3"))),
+  sim2_est1_long,
+  subset(sim2_est2_long,!(param %in% c("pnm_1","pnm_2","pnm_3"))),
+  sim3_est1_long,
+  subset(sim3_est2_long,!(param %in% c("pnm_1","pnm_2","pnm_3"))),
+  sim4_est1_long,
+  subset(sim4_est2_long,!(param %in% c("pnm_1","pnm_2","pnm_3")))
+)
+
+my_table <- all_long %>% 
+  group_by(param, method, variance, missing) %>%
+    summarize(true = mean(true),
+              mean = mean(estimate),
+              sd = sd(estimate),
+              bias = mean(abs(true - estimate)/abs(true)),
+              MAE = mean(abs(true - estimate))) %>%
+      gather(measure,value,-c(param,method,variance,missing)) %>%
+        recast(param + variance + missing  ~  method + measure)
+
+sim5_long <- rbind(
+  sim5_est1_long,
+  subset(sim5_est2_long,!(param %in% c("pnm_1","pnm_2","pnm_3"))),
+  sim5_est3_long
+)
+
+my_table_5 <- sim5_long %>% 
+  group_by(param, method, variance, missing) %>%
+    summarize(true = mean(true),
+              mean = mean(estimate),
+              sd = sd(estimate),
+              bias = mean(abs(true - estimate)/abs(true)),
+              MAE = mean(abs(true - estimate))) %>%
+      gather(measure,value,-c(param,method,variance,missing)) %>%
+        recast(param + variance + missing  ~  method + measure)
+
+```
+
+
+```{r table-simulation-1, echo=FALSE}
+options(knitr.kable.NA = '-')
+tabsim1 <- my_table %>%
+  filter(variance == "low" & missing == "unequal") %>%
+    dplyr::select(param, MNAR_true, paste0("MAR_",c("mean","sd","MAE"),sep=""),
+         paste0("MNAR_",c("mean","sd","MAE"),sep="")) %>%
+       mutate(percMAE = MNAR_MAE/MAR_MAE)
+tabsim1 <- tabsim1[c(1:3,7:9,4:6,10:nrow(tabsim1)),]
+tabsim1 %>%
+      kable("latex", 
+            booktabs = T, 
+            col.names=c("parameter","true value","mean", "SD", "MAE", "mean", "SD", "MAE", "rel. MAE"),
+            caption = "Results of Simulation 1 (MNAR, low variance). Values shown are the true value of each parameter, and the mean (mean), standard deviation (SD), and mean absolute error (MAE) of the parameter estimates, for both the MAR and MNAR model. The value of \"rel. MAE\" is the ratio of the mean absolute error of the MAR over the MNAR model.",
+            row.names = FALSE,
+            escape=FALSE,
+            digits = 3,
+            linesep = c('', '', '\\addlinespace')) %>%
+        kable_styling() %>%
+          add_header_above(c(" " = 1, " " = 1, "MAR" = 3, "MNAR" = 3, " " = 1))
+```
+
+
+```{r table-simulation-2, echo=FALSE}
+options(knitr.kable.NA = '-')
+tabsim2 <- my_table %>%
+  filter(variance == "low" & missing == "equal") %>%
+    dplyr::select(param, MNAR_true, paste0("MAR_",c("mean","sd","MAE"),sep=""),
+         paste0("MNAR_",c("mean","sd","MAE"),sep="")) %>%
+       mutate(percMAE = MNAR_MAE/MAR_MAE)
+tabsim2 <- tabsim2[c(1:3,7:9,4:6,10:nrow(tabsim2)),]
+tabsim2 %>%
+      kable("latex", 
+            booktabs = T, 
+            col.names=c("parameter","true value","mean", "SD", "MAE", "mean", "SD", "MAE", "rel. MAE"),
+            caption = "Results of Simulation 2 (MAR, low variance). Values shown are the true value of each parameter, and the mean (mean), standard deviation (SD), and mean absolute error (MAE) of the parameter estimates, for both the MAR and MNAR model. The value of \"rel. MAE\" is the ratio of the mean absolute error of the MAR over the MNAR model.",
+            escape=FALSE,
+            row.names = FALSE,
+            digits = 3,
+            linesep = c('', '', '\\addlinespace')) %>%
+        kable_styling() %>%
+          add_header_above(c(" " = 1, " " = 1, "MAR" = 3, "MNAR" = 3, " " = 1))
+```
+
+```{r table-simulation-3, echo=FALSE}
+options(knitr.kable.NA = '-')
+tabsim3 <- my_table %>%
+  filter(variance == "high" & missing == "unequal") %>%
+    dplyr::select(param, MNAR_true, paste0("MAR_",c("mean","sd","MAE"),sep=""),
+         paste0("MNAR_",c("mean","sd","MAE"),sep="")) %>%
+       mutate(percMAE = MNAR_MAE/MAR_MAE)
+tabsim3 <- tabsim3[c(1:3,7:9,4:6,10:nrow(tabsim3)),]
+tabsim3 %>%
+      kable("latex", 
+            booktabs = T, 
+            col.names=c("parameter","true value","mean", "SD", "MAE", "mean", "SD", "MAE", "rel. MAE"),
+            caption = "Results of Simulation 3 (MNAR, high variance). Values shown are the true value of each parameter, and the mean (mean), standard deviation (SD), and mean absolute error (MAE) of the parameter estimates, for both the MAR and MNAR model. The value of \"rel. MAE\" is the ratio of the mean absolute error of the MAR over the MNAR model.",
+            escape=FALSE,
+            row.names = FALSE,
+            digits = 3,
+            linesep = c('', '', '\\addlinespace')) %>%
+        kable_styling() %>%
+          add_header_above(c(" " = 1, " " = 1, "MAR" = 3, "MNAR" = 3, " " = 1))
+```
+
+```{r table-simulation-4, echo=FALSE}
+options(knitr.kable.NA = '-')
+tabsim4 <- my_table %>%
+  filter(variance == "high" & missing == "equal") %>%
+    dplyr::select(param, MNAR_true, paste0("MAR_",c("mean","sd","MAE"),sep=""),
+         paste0("MNAR_",c("mean","sd","MAE"),sep="")) %>%
+      mutate(percMAE = MNAR_MAE/MAR_MAE)
+tabsim4 <- tabsim4[c(1:3,7:9,4:6,10:nrow(tabsim4)),]
+tabsim4 %>%
+      kable("latex", 
+            booktabs = T, 
+            col.names=c("parameter","true value","mean", "SD", "MAE", "mean", "SD", "MAE", "rel. MAE"),
+            caption = "Results of Simulation 4 (MAR, high variance). Values shown are the true value of each parameter, and the mean (mean), standard deviation (SD), and mean absolute error (MAE) of the parameter estimates, for both the MAR and MNAR model. The value of \"rel. MAE\" is the ratio of the mean absolute error of the MAR over the MNAR model.",
+            escape=FALSE,
+            row.names = FALSE,
+            digits = 3,
+            linesep = c('', '', '\\addlinespace')) %>%
+        kable_styling() %>%
+          add_header_above(c(" " = 1, " " = 1, "MAR" = 3, "MNAR" = 3, " " = 1))
+```
+
+```{r load-classification-accuracy}
+load("classification_accuracy.RData")
+```
+The results of simulation 1 (Table \ref{tab:table-simulation-1}) show that, when states are relatively well separated, both models provide parameter estimates which are, on average, reasonably close to the true values. Both models have the tendency to estimate the means as more dispersed, and the standard deviations as slightly smaller, then they really are. While wrongly assuming MAR may not lead to overly biased estimates, we see that the mean absolute error (MAE) for the MNAR model is always smaller than that of the MAR model, reducing the estimation error to as much as `r round(min(tabsim1$percMAE,na.rm=TRUE),2)*100`\%. As such, accounting for state-dependent missingness increases the accuracy of the parameter estimates. We next consider recovery of the hidden states, by comparing the true hidden state sequences to the maximum a posteriori state sequences determined by the Viterbi algorithm [see @Rabiner1989;@visser2021hidden]. The MAR model recovers `r round(mean(sim1_pcorstate1)*100,2)`\% of the states, while the MNAR model recovers `r round(mean(sim1_pcorstate2)*100,2)`\% of the states. The accuracy in recovering the hidden states is thus higher in the model which correctly accounts for missingness. Whilst the performance of neither model may seem overly impressive, we should note that recovering the hidden states is a non-trivial task when the state-conditional response distributions have considerable overlap (see Figure \ref{fig:simulation-response-distributions}) and states do not persist for long periods of time (here, the true self-transitions probabilities are $a_{ii} = .75$, meaning that states have an average run-length of 4 consecutive time-points). When ignoring time-dependencies and treating the observed data as coming from a bivariate mixture distribution over $\obs$ and $M$, the maximum accuracy in classification would be `r round((.95*(1/3)*pnorm(-.5,mean=-1, sd = 1) + .75*(1/3)*(pnorm(.5,mean=0, sd = 1) - pnorm(.5,mean=0, sd = 1)) + .5*(1/3)*(1-pnorm(.5, mean=1, sd=1)) + (1/3)*(.05 + .25 + .5)*(.5/(.05+.25+.5)))*100,2)`% for this data. The theoretical maximum classification accuracy for the hidden Markov model is more difficult to establish, but simulations show that the MNAR model with the true parameters recovers `r round(100*mean(sim1_MNAR_acc),2)`% of the true states. For the MAR model, the approximate maximum classification accuracy is `r round(100*mean(sim1_MAR_acc),2)`%.
+
+The results of Simulation 2 (Table \ref{tab:table-simulation-2}) show that when data is in fact MAR, both models provide roughly equally accurate parameter estimates. While the MNAR model does not provide better parameter estimates, including a model component for state-dependent missingness does not seem to bias parameter estimates compared to the MAR model. As can be seen, the state-wise missingness probabilities are, on average, close to the true values of .25. Over all parameters, the relative MAE of the models is `r round(mean(tabsim2$percMAE,na.rm=TRUE),3)` on average, which shows the models perform equally well. In terms of recovering the hidden states, the MAR model recovers `r round(mean(sim2_pcorstate1)*100,2)`\% of the states, while the MNAR model recovers `r round(mean(sim2_pcorstate2)*100,2)`\% of the states. The somewhat reduced recovery rate of the MNAR model compared to Simulation 1 is likely due to the fact that here, missingness provides no information about the identity of the hidden state. Here, the maximum classification accuracy is `r round((.75*(1/3)*pnorm(-.5,mean=-1, sd = 1) + .75*(1/3)*(pnorm(.5,mean=0, sd = 1) - pnorm(.5,mean=0, sd = 1)) + .75*(1/3)*(1-pnorm(.5, mean=1, sd=1)) + (1/3)*(.25 + .25 + .25)*(.25/(.25+.25+.25)))*100,2)`% for a mixture model, and approximately `r round(100*mean(sim2_MNAR_acc),2)`% for the hidden Markov models.
+
+In Simulation 3 (Table \ref{tab:table-simulation-3}) and 4 (Table \ref{tab:table-simulation-4}) the states are less well-separated, making accurate parameter estimation more difficult. Here, the tendency to estimate the means as more dispersed and the standard deviations as smaller than they are becomes more pronounced. For both models the estimation error in Simulation 3 (Table \ref{tab:table-simulation-3}) is larger than for Simulation 1, but comparing the MAE for both models again shows the substantial benefits for including a missingness model. Over all parameters, the relative MAE of the models is `r round(mean(tabsim3$percMAE,na.rm=TRUE),3)` on average, which shows the MNAR model clearly outperforms the MAR model. In terms of recovering the hidden states, the MAR model recovers `r round(mean(sim3_pcorstate1)*100,2)`\% of the states, while the MNAR model recovers `r round(mean(sim3_pcorstate2)*100,2)`\% of the states. As in Simulation 1, the MNAR model performs better in state identification. For both models, performance is lower than in Simulation 1, reflecting the increased difficulty due to increased overlap of the state-conditional response distributions (Figure \ref{fig:simulation-response-distributions}). Indeed, the performance of the MAR model is close to chance (random assignment of states would give an expected accuracy of 33.33\%). The maximum classification accuracy is `r round((.95*(1/3)*pnorm(-.5,mean=-1, sd = 3) + .75*(1/3)*(pnorm(.5,mean=0, sd = 3) - pnorm(.5,mean=0, sd = 3)) + .5*(1/3)*(1-pnorm(.5, mean=1, sd=3)) + (1/3)*(.05 + .25 + .5)*(.5/(.05+.25+.5)))*100,2)`% for a mixture model, and approximately 
+`r round(100*mean(sim3_MNAR_acc),2)`% for the MNAR and `r round(100*mean(sim3_MAR_acc),2)`% for the MAR hidden Markov models. 
+
+When missingness is ignorable (Simulation 4), Like in Simulation 2, inclusion of a missingness component in the HMM does not increase any bias in the parameter estimates. Over all parameters, the relative MAE of the models is `r round(mean(tabsim4$percMAE,na.rm=TRUE),3)` on average, which shows the models perform roughly equally well. The model which ignores missingness recovers `r round(mean(sim4_pcorstate1)*100,2)`\% of the states, while the model with a missingness component recovers `r round(mean(sim4_pcorstate2)*100,2)`\% of the states. For comparison, the maximum accuracy is `r round((.75*(1/3)*pnorm(-.5,mean=-1, sd = 3) + .75*(1/3)*(pnorm(.5,mean=0, sd = 3) - pnorm(.5,mean=0, sd = 3)) + .75*(1/3)*(1-pnorm(.5, mean=1, sd=3)) + (1/3)*(.25 + .25 + .25)*(.25/(.25+.25+.25)))*100,2)`% for a mixture model, and
+`r round(100*mean(sim4_MNAR_acc),2)`% for the hidden Markov models.
+
+Taken together, these simulation results show that if missingness is state-dependent, there is a substantial benefit to including a (relatively simple) model for missingness in the HMM. When missingness is in fact ignorable, including a missingness model is superfluous, but does not bias the results. Hence, there appears to be little risk associated to including a missingness model into the HMM.
+
+In a final simulation, we assessed the performance of the models when missingness is *time-dependent*, rather than state-dependent. Attrition is a common occurrence in longitudinal studies, meaning that the probability of missing data often increases with time. In this simulation, the probability of missing data varied with time $t$ through a logistic regression model:
+\begin{equation}
+\Prob(M_{i,t} = 1) = \frac{1}{1+\exp(-(0.125 \times t - 5))} .
+\end{equation}
+Here, the probability of missing data is very small (`r round(1/(1+exp(-0.125*1:50 + 5))[1],3)`) at time 1, but increasing to rather high (`r round(1/(1+exp(-0.125*1:50 + 5))[50],3)`) at time 50. The other parameters were the same as in Simulation 1 and 2 (i.e., the states were relatively well-separated). In a model that specifies missingness as state-dependent, but not time-dependent, this could potentially result in biased parameter estimates. For instance, the increased probability of missingness over time may be accounted for by estimating states to have a different probability of missingness, and estimating prior and transition probabilities to allow states with a higher probability of missingness to occur more frequently later in time. In addition to the two hidden Markov models estimated before, we also estimated a hidden Markov model with a state- and time-dependent model for missingness:
+\begin{equation}
+\Prob(M_{i,t} = 1|S_{i,t} = j) = \frac{1}{1+\exp(-(\beta_{0,j} + \beta_{\text{time},j} \times t))}
+\end{equation}
+This model should be able to capture the true pattern of missingness, whilst the MNAR model which only includes state-dependent missingness would not.
+
+```{r table-simulation-5, echo=FALSE}
+options(knitr.kable.NA = '-')
+tabsim5 <- my_table_5 %>%
+    dplyr::select(param, MNAR_time_true, paste0("MAR_",c("mean","sd","MAE"),sep=""),
+         paste0("MNAR_",c("mean","sd","MAE"),sep=""),
+         paste0("MNAR_time_",c("mean","sd","MAE"),sep="")) %>%
+      mutate(percMAE1 = MNAR_MAE/MAR_MAE,
+             percMAE2 = MNAR_time_MAE/MAR_MAE)
+tabsim5[c(7:9,13:15,10:12,16:24,4:6,1:3,25:27),] %>%
+      kable("latex", 
+            booktabs = T, 
+            col.names=c("parameter","true value","mean", "SD", "MAE", "mean", "SD", "MAE","mean", "SD", "MAE","rel. MAE 1", "rel. MAE 2"),
+            row.names=FALSE,
+            caption = "Results of Simulation 5 (time-dependent missingness, low variance). Values shown are the true value of each parameter, and the mean (mean), standard deviation (SD), and mean absolute error (MAE) of the parameter estimates, for the MAR, MNAR (state), and MNAR (time) model. The value of \"rel. MAE 1\" is the ratio of the mean absolute error of the MAR over the MNAR (state) model, and the value of \"rel. MAE 2\" is the ratio of the mean absolute error of the MAR over the MNAR (time) model.",
+            escape=FALSE,
+            digits = 3,
+            linesep = c('', '', '\\addlinespace')) %>%
+        kable_styling(latex_options = c("scale_down")) %>%
+          add_header_above(c(" " = 1, " " = 1, "MAR" = 3, "MNAR (state)" = 3, "MNAR (time)" = 3, " " = 2))
+```
+The results (Table \ref{tab:table-simulation-5}) show that, compared to the MAR model, the MNAR model which misspecifies missingness as state-dependent is inferior, resulting in more biased parameter estimates. Over all parameters, the relative MAE of these two models is `r round(mean(tabsim5$percMAE1,na.rm=TRUE),3)` on average, indicating the MAR model outperforms the MNAR (state) model. To account for the increase in missing values later in time, the MNAR (state) model estimates the probability of missingness as highest for state 2, which is estimated to have a mean of close to 0, but an increased standard deviation to incorporate observations from the other two states. To make state 2 more prevalent over time, transition probabilities to state 2 are relatively low from state 1 and 2 (parameters $a_{12}$ and $a_{32}$ respectively), whilst self-transitions ($a_{22}$) are close to 1 (meaning that once in state 2, the hidden state sequence is very likely to remain in that state. The prevalence of state 2 is thus increasing over time, and as this state has a higher probability of missingness, so is the prevalence of missing values. 
+The MNAR (time) model, which allows missingness to depend on both the hidden states and time, performs only slightly worse than the MAR model, with an average relative MAE over all parameters of this model compared to the MAR of `r round(mean(tabsim5$percMAE2,na.rm=TRUE),3)`. However, the MNAR (time) model is able to capture the pattern of attrition (increased missing data over time), whilst the MAR model is not. As such, the MNAR (time) model may be deemed preferable to the MAR model, insofar as one is interested in more than modelling the responses $\obs$. In terms of recovering the hidden states, the MAR model recovers `r round(mean(sim5_pcorstate1)*100,2)`\% of the states, and the MNAR (time) model recovers `r round(mean(sim5_pcorstate3)*100,2)`\% of the states. The misspecified MNAR (state) model recovers `r round(mean(sim5_pcorstate2)*100,2)`\% of the states. The maximum classification accuracy for this data is `r round(((1-mean(1/(1+exp(-(.125*1:50 - 5)))))*(1/3)*pnorm(-.5,mean=-1, sd = 1) + (1-mean(1/(1+exp(-(.125*1:50 - 5)))))*(1/3)*(pnorm(.5,mean=0, sd = 1) - pnorm(.5,mean=0, sd = 1)) + (1-mean(1/(1+exp(-(.125*1:50 - 5)))))*(1/3)*(1-pnorm(.5, mean=1, sd=1)) + (mean(1/(1+exp(-(.125*1:50 - 5)))))*(1/3)) *100,2)`% for a mixture model, and approximately `r round(100*mean(sim5_MAR_acc),2)`% for the hidden Markov models.
+
+This final simulation shows that when modelling patterns of missing data in hidden Markov models, care should be taken in how this is done. An increase in missing data over time could be due to an underlying higher prevalence of states which result in more missing data, and/or a state-independent increase in missingness over time. In applications where the true reason and pattern of missingness is unknown, it is then advisable to start by allowing for both state- and time-dependent missing data, selecting simpler options when this is warranted by the data.
+
+# Application: Severity of schizophrenia in a clinical trial
+
+Here, we apply our hidden Markov model with state-dependent missingness to data from the National Institute of Mental Health Schizophrenia Collaborative Study. The study concerns the assessment of treatment-related changes in overall severity of mental illness. In this study, 437 patients diagnosed with schizophrenia were randomly assigned to receive either placebo (108 patients) or a drug (329 patients) treatment, and their severity of their illness was rated by a clinician at baseline (week 0), and at subsequent 1 week intervals (weeks 1–6), with week 1, 3, and 6 as the intended main follow-up measurements. This data has been made publicly available by Don Hedeker^[https://hedeker.people.uic.edu/SCHIZREP.DAT.txt.] and has been analysed numerous times. In particular, @hedeker1997application focused on pattern mixture methods to deal with missing data. @yeh2010estimating and @yeh2012intermittent applied Markov and hidden Markov models, respectively, assuming ratings were MAR.
+
+```{r load-data, echo=FALSE}
+dat <- read.table("https://hedeker.people.uic.edu/SCHIZREP.DAT.txt")
+colnames(dat) <- c("id","imps79","week","drug","sex")
+dat$id <- factor(dat$id)
+for(i in levels(dat$id)) {
+  tmp <- subset(dat,id==i)
+  weeks <- tmp$week
+  for(j in 0:6) {
+    if(!(j %in% weeks)) dat <- rbind(dat,c(id=i,imps79=NA,week=j,tmp[1,c("drug","sex")]))
+  }
+}
+dat <- dat[order(dat$id,dat$week),]
+
+#id = subject id number
+#imps79 = overall severity (1=normal, ..., 7=among the most extremely ill)
+#week   = 0,1,2,3,4,5,6 (most of the obs. are at weeks 0,1,3, and 6)
+#drug     0=placebo  1=drug (chlorpromazine, fluphenazine, or thioridazine)
+#sex      0=female   1=male
+
+dat$missing <- as.numeric(is.na(dat$imps79))
+dat$measure_week <- 1
+dat$measure_week[dat$week %in% c(2,4,5)] <- 0
+dat$main <- dat$measure_week #alternative name
+mis_tab <- dat %>%
+  group_by(week) %>%
+    summarize(percent_missing = 100*sum(1-missing)/n()) %>%
+      spread(week, percent_missing)
+
+complete_tab <- dat %>%
+  dplyr::select(id,week,missing) %>%
+    group_by(id, .drop=TRUE) %>%
+      mutate(n_rating = sum(!missing)) %>%
+        filter(row_number() == 1)
+complete_tab <- table(complete_tab$n_rating)/nrow(complete_tab)*100
+```
+
+The analysis focuses on a single item of the Inpatient Multidimensional Psychiatric Scale [@lorr1966inpatient], which rates illness severity on a scale from 1 ("normal") to 7 ("among the most extremely ill").^[The dataset provided contains some non-integer values for these ratings, presumably given to provide a finer-grained evaluation by the clinician.]. Most participants were measured on week 0 (`r as.numeric(round(mis_tab[,1],2))`%) and 1 (`r as.numeric(round(mis_tab[,2],2))`%), whilst the other main measurement points at week 3 (`r as.numeric(round(mis_tab[,4],2))`%) and 6 (`r as.numeric(round(mis_tab[,7],2))`%) show more missing values. For a few participants, ratings were instead obtained on week 2 (`r as.numeric(round(mis_tab[,3],2))`%), 4 (`r as.numeric(round(mis_tab[,5],2))`%), and/or 5 (`r as.numeric(round(mis_tab[,6],2))`%). Even when ignoring these rare deviations from the main measurement points, there is a clear potential issue with missing data and attrition, with `r round(as.numeric(complete_tab["4"] + complete_tab["5"]),2)`% being measured the intended four times or more, and `r round(as.numeric(complete_tab["3"]),2)`% rated on just three occasions, and `r round(as.numeric(complete_tab["2"]),2)`% only twice. The distribution of the ratings at each week is shown in Figure \ref{fig:histograms-of-ratings-by-week}. As can be seen there, ratings were generally relatively high at week 0, 1, and 3, but are relatively lower at week 6. As there are only a small number of ratings at week 2, 4, and 5, the empirical distributions for those weeks are rather unreliable.
+
+```{r histograms-of-ratings-by-week, fig.cap="Distribution of the severity of illness ratings (IMPS item 79) at each week.", fig.align='center', out.width="80%"}
+dat %>%
+  ggplot(aes(x=imps79)) + geom_histogram(binwidth=1,center=1) + facet_wrap(~week, scales="free_y") + xlab("imps79") + theme_minimal()
+# hist(dat$imps79)
+```
+
+
+```{r glm-model-missingness}
+mod <- glm(missing ~ drug*week + drug*main, data=dat,family=binomial())
+tab <- summary(mod)$coefficients
+rownames(tab) <- c("\\texttt{(Intercept)}", "\\texttt{drug}", "\\texttt{week}", "\\texttt{main}", "$\\texttt{drug} \\times \\texttt{week}$","$\\texttt{drug} \\times \\texttt{main}$")
+kable(tab, digits=3, caption = "Results of a logistic regression analysis modelling missingness as a function of drug, week, and whether the week was a main measurement occasion or not.", booktabs=TRUE, linesep="", escape=FALSE, col.names = c("$\\hat{\\beta}$","$\\text{SE}(\\hat{\\beta})$","$z$","$P(>|z|)$"))
+```
+To gain initial insight into patterns underlying the missing data, we modelled whether the IMPS rating was missing or not with a logistic regression model. Predictors in the model were a dummy-coded variable `drug` (placebo = 0, medicine = 1), `week` (from 0 to 6) as a metric predictor, and a dummy-coded variable `main` to indicate whether the rating was at a main measurement week (i.e. at week 0, 1, 3, or 6). We also included an interaction between `drug` and `week`, and between `drug` and `main`. The results of this analysis (Table \ref{tab:glm-model-missingness}) show a positive effect of `week` (such that missingness increases over time), and a negative effect of `main`, with (many) more missing values on weeks which are _not_ the main measurement weeks. The positive effect of `week` is a clear sign of attrition. A question now is whether this attrition is related to the severity of the illness, in which case the ratings at week 6 would provide a biased view on the true severity of illness after 6 weeks of treatment with a placebo or medicine. There are of course different methods to assess this, and many have been already applied to this particular dataset. Our objective here is to incorporate a model of missingness into a hidden Markov model, allowing missingness to depend on the latent state as well as observable features such as the measurement week.
+
+## Hidden Markov models
+
+We fitted HMMs in which we either assumed ratings are MAR, or assume ratings are MNAR and state- and time-dependent. For each type of model (MAR or MNAR), we fit versions with 2, 3, 4, or 5 states. Both types of model assume `imps79`, the IMPS Item 79 ratings, follow a Normal distribution, with a state-dependent mean and standard deviation. No additional covariates were included, as the states are intended to capture all the important determinants of illness severity. To model effects of drug, we allow transitions between states, as well as the initial state, to depend on `drug`. Whilst the initial measurement at week 0 was made before administering the drug, we include a possible dependence to account for any potential pre-existing differences between the conditions. In the MNAR models, a second (dichotomous) response variable `missing` is included, in addition to `imps79`. The `missing` variable is modelled with a logistic regression, using `week` and the dummy-coded `main` variable as predictors, as these were found to be important predictors in the (state-independent) logistic regression analysis reported earlier. All models were estimated by maximum likelihood using the EM algorithm implemented in depmixS4 [@depmixS4].
+
+```{r fit-hmms, cache=TRUE, warning=FALSE, message=FALSE, results='hide'}
+set.seed(587653)
+require(depmixS4)
+mod_nomiss_2state <- depmix(imps79 ~ 1, nstates = 2, transition = ~ drug, prior = ~drug, 
+                            initdata = subset(dat,week==1), data=dat,
+                            ntimes=rep(7,length(levels(dat$id))))
+fmod_nomiss_2state <- fit(mod_nomiss_2state,verbose=FALSE)
+
+mod_nomiss_3state <- depmix(imps79 ~ 1, nstates = 3, transition = ~ drug, prior = ~drug, 
+                            initdata = subset(dat,week==1), data=dat,
+                            ntimes=rep(7,length(levels(dat$id))))
+fmod_nomiss_3state <- fit(mod_nomiss_3state,verbose=FALSE)
+
+mod_nomiss_4state <- depmix(imps79 ~ 1, nstates = 4, transition = ~ drug, prior = ~drug, 
+                            initdata = subset(dat,week==1), data=dat,
+                            ntimes=rep(7,length(levels(dat$id))))
+fmod_nomiss_4state <- fit(mod_nomiss_4state,verbose=FALSE)
+
+set.seed(20210511)
+mod_nomiss_5state <- depmix(imps79 ~ 1, nstates = 5, transition = ~ drug, prior = ~drug, 
+                            initdata = subset(dat,week==1), data=dat,
+                            ntimes=rep(7,length(levels(dat$id))))
+fmod_nomiss_5state <- fit(mod_nomiss_5state,verbose=FALSE)
+
+set.seed(587653)
+
+# fit models with state-dependent missingness
+mod_miss_2state <- depmix(list(imps79 ~ 1, missing ~ week + measure_week),
+                          family=list(gaussian(),binomial()),nstates = 2, transition = ~ drug, 
+                          prior = ~ drug, initdata = subset(dat,week==1), data=dat,
+                          ntimes=rep(7,length(levels(dat$id))))
+fmod_miss_2state <- fit(mod_miss_2state,verbose=FALSE)
+mod_miss_3state <- depmix(list(imps79 ~ 1, missing ~ week + measure_week),
+                          family=list(gaussian(),binomial()),nstates = 3, transition = ~ drug, 
+                          prior = ~ drug, initdata = subset(dat,week==1), data=dat,
+                          ntimes=rep(7,length(levels(dat$id))))
+fmod_miss_3state <- fit(mod_miss_3state,verbose=FALSE)
+mod_miss_4state <- depmix(list(imps79 ~ 1, missing ~ week + measure_week),
+                          family=list(gaussian(),binomial()),nstates = 4, transition = ~ drug, 
+                          prior = ~ drug, initdata = subset(dat,week==1), data=dat,
+                          ntimes=rep(7,length(levels(dat$id))))
+fmod_miss_4state <- fit(mod_miss_4state,verbose=FALSE)
+mod_miss_5state <- depmix(list(imps79 ~ 1, missing ~ week + measure_week),
+                          family=list(gaussian(),binomial()),nstates = 5, transition = ~ drug, 
+                          prior = ~ drug, initdata = subset(dat,week==1), data=dat,
+                          ntimes=rep(7,length(levels(dat$id))))
+fmod_miss_5state <- fit(mod_miss_5state,verbose=FALSE)
+# mod_miss_5state <- depmix(list(imps79 ~ 1, missing ~ week + measure_week),family=list(gaussian(),binomial()),nstates = 5, transition = ~ drug, prior = ~ drug, initdata = subset(dat,week==1), data=dat,ntimes=rep(7,length(levels(dat$id))))
+# fmod_miss_5state <- fit(mod_miss_4state,verbose=FALSE)
+```
+
+```{r model-table,warning=FALSE, message=FALSE}
+model_dat <- data.frame(
+  missingness = c("MAR","","","","MNAR","","",""),
+  n_state = c(2,3,4,5,2,3,4,5),
+  logLik = c(logLik(fmod_nomiss_2state),logLik(fmod_nomiss_3state),logLik(fmod_nomiss_4state),logLik(fmod_nomiss_5state),
+             logLik(fmod_miss_2state),logLik(fmod_miss_3state),logLik(fmod_miss_4state),logLik(fmod_miss_5state)),
+  npar = c(npar(fmod_nomiss_2state),npar(fmod_nomiss_3state),npar(fmod_nomiss_4state),npar(fmod_nomiss_5state),
+             npar(fmod_miss_2state),npar(fmod_miss_3state),npar(fmod_miss_4state),npar(fmod_miss_5state)),
+  AIC = c(AIC(fmod_nomiss_2state),AIC(fmod_nomiss_3state),AIC(fmod_nomiss_4state),AIC(fmod_nomiss_5state),
+             AIC(fmod_miss_2state),AIC(fmod_miss_3state),AIC(fmod_miss_4state),AIC(fmod_miss_5state)),
+  BIC = c(BIC(fmod_nomiss_2state),BIC(fmod_nomiss_3state),BIC(fmod_nomiss_4state),BIC(fmod_nomiss_5state),
+             BIC(fmod_miss_2state),BIC(fmod_miss_3state),BIC(fmod_miss_4state),BIC(fmod_miss_5state))
+)
+knitr::kable(model_dat,format="latex", booktabs=TRUE, linesep=c("","","","\\addlinespace"), col.names = c("model","#states","log Likelihood","#par","AIC","BIC"), caption = "Modelling results for the MAR and MNAR hidden Markov models with 2-5 latent states.")
+```
+
+```{r hmm-parameters-MAR,echo=FALSE}
+means <- round(getpars(fmod_nomiss_3state)[c(25,27,29)],3)
+sds <- round(getpars(fmod_nomiss_3state)[c(26,28,30)],3)
+
+coef <- matrix(getpars(fmod_nomiss_3state)[1:6],ncol=3,byrow = TRUE)
+p <- exp(colSums(coef*c(1,0)))
+prior_placebo <- round(p/sum(p),3)
+p <- exp(colSums(coef*c(1,1)))
+prior_drug <- round(p/sum(p),3)
+
+transition_placebo <- transition_drug <- matrix(0.0,ncol=3,nrow=3)
+coef <- matrix(getpars(fmod_nomiss_3state)[7:12],ncol=3,byrow = TRUE)
+p <- exp(colSums(coef*c(1,0)))
+transition_placebo[1,] <- round(p/sum(p),3)
+p <- exp(colSums(coef*c(1,1)))
+transition_drug[1,] <- round(p/sum(p),3)
+
+coef <- matrix(getpars(fmod_nomiss_3state)[13:18],ncol=3,byrow = TRUE)
+p <- exp(colSums(coef*c(1,0)))
+transition_placebo[2,] <- round(p/sum(p),3)
+p <- exp(colSums(coef*c(1,1)))
+transition_drug[2,] <- round(p/sum(p),3)
+
+coef <- matrix(getpars(fmod_nomiss_3state)[19:24],ncol=3,byrow = TRUE)
+p <- exp(colSums(coef*c(1,0)))
+transition_placebo[3,] <- round(p/sum(p),3)
+p <- exp(colSums(coef*c(1,1)))
+transition_drug[3,] <- round(p/sum(p),3)
+```
+
+For both the MAR and MNAR models, the BIC indicates a three-state model fits best, whilst the AIC indicates a five-state model (or higher) fits best. Favouring simplicity, we follow the BIC scores here, and focus on the three-state models. 
+
+We first consider the estimates of the MAR model. The estimated means and standard deviations are
+\begin{equation*}
+\gvc{\mu} = [`r means[1]`,`r means[2]`, `r means[3]`] \quad \quad \gvc{\sigma} = [`r sds[1]`,`r sds[2]`, `r sds[3]`].
+\end{equation*}
+Hence, the states are ordered, with state 1 being the least severe, and state 3 the most severe.
+The prior probabilities of the states, for treatment with placebo and drug respectively, are 
+\begin{equation*}
+\gvc{\pi}_\text{placebo} = [`r prior_placebo[1]`,`r prior_placebo[2]`,`r prior_placebo[3]`] \quad \quad \gvc{\pi}_\text{drug} = [`r prior_drug[1]`,`r prior_drug[2]`,`r prior_drug[3]`],
+\end{equation*}
+and the transition probability matrices (with initial states in rows and subsequent states in columns) are 
+\begin{equation*}
+\mathbf{T}_\text{placebo} = \left[ \begin{matrix} `r transition_placebo[1,1]` &  `r transition_placebo[1,2]` &  `r transition_placebo[1,3]` \\ `r transition_placebo[2,1]` &  `r transition_placebo[2,2]` &  `r transition_placebo[2,3]`
+\\ `r transition_placebo[3,1]` &  `r transition_placebo[3,2]` &  `r transition_placebo[3,3]` \end{matrix} \right] \quad \quad \mathbf{T}_\text{drug} = \left[ \begin{matrix} `r transition_drug[1,1]` &  `r transition_drug[1,2]` &  `r transition_drug[1,3]` \\ `r transition_drug[2,1]` &  `r transition_drug[2,2]` &  `r transition_drug[2,3]`
+\\ `r transition_drug[3,1]` &  `r transition_drug[3,2]` &  `r transition_drug[3,3]` \end{matrix} \right].
+\end{equation*}
+As expected, the initial state probabilities show little difference between the treatments (as the initial measurement was conducted before treatment commenced), but the transition probabilities indicate that for those who were administered a real drug, transitions to less severe states are generally more likely, indicating effectiveness of the drugs. This is particularly marked for the most severe state, where the probability of remaining in that state is `r transition_placebo[3,3]` with a placebo, but `r transition_drug[3,3]` with a drug.
+
+```{r hmm-parameters-MNAR,echo=FALSE}
+means <- round(getpars(fmod_miss_3state)[c(25,30,35)],3)
+sds <- round(getpars(fmod_miss_3state)[c(26,31,36)],3)
+
+coef <- matrix(getpars(fmod_miss_3state)[1:6],ncol=3,byrow = TRUE)
+p <- exp(colSums(coef*c(1,0)))
+prior_placebo <- round(p/sum(p),3)
+p <- exp(colSums(coef*c(1,1)))
+prior_drug <- round(p/sum(p),3)
+
+transition_placebo <- transition_drug <- matrix(0.0,ncol=3,nrow=3)
+coef <- matrix(getpars(fmod_miss_3state)[7:12],ncol=3,byrow = TRUE)
+p <- exp(colSums(coef*c(1,0)))
+transition_placebo[1,] <- round(p/sum(p),3)
+p <- exp(colSums(coef*c(1,1)))
+transition_drug[1,] <- round(p/sum(p),3)
+
+coef <- matrix(getpars(fmod_miss_3state)[13:18],ncol=3,byrow = TRUE)
+p <- exp(colSums(coef*c(1,0)))
+transition_placebo[2,] <- round(p/sum(p),3)
+p <- exp(colSums(coef*c(1,1)))
+transition_drug[2,] <- round(p/sum(p),3)
+
+coef <- matrix(getpars(fmod_miss_3state)[19:24],ncol=3,byrow = TRUE)
+p <- exp(colSums(coef*c(1,0)))
+transition_placebo[3,] <- round(p/sum(p),3)
+p <- exp(colSums(coef*c(1,1)))
+transition_drug[3,] <- round(p/sum(p),3)
+```
+We next consider the three-state MNAR model. The means and standard deviations are 
+\begin{equation*}
+\gvc{\mu} = [`r means[1]`,`r means[2]`, `r means[3]`] \quad \quad \gvc{\sigma} = [`r sds[1]`,`r sds[2]`, `r sds[3]`]
+\end{equation*}
+showing the same ordering of states in terms of severity. The prior probabilities for placebo and drug groups are 
+\begin{equation*}
+\gvc{\pi}_\text{placebo} = [`r prior_placebo[1]`,`r prior_placebo[2]`,`r prior_placebo[3]`] \quad \quad \gvc{\pi}_\text{drug} = [`r prior_drug[1]`,`r prior_drug[2]`,`r prior_drug[3]`],
+\end{equation*}
+and the transition probability matrices are 
+\begin{equation*}
+\mathbf{T}_\text{placebo} = \left[ \begin{matrix} `r transition_placebo[1,1]` &  `r transition_placebo[1,2]` &  `r transition_placebo[1,3]` \\ `r transition_placebo[2,1]` &  `r transition_placebo[2,2]` &  `r transition_placebo[2,3]`
+\\ `r transition_placebo[3,1]` &  `r transition_placebo[3,2]` &  `r transition_placebo[3,3]` \end{matrix} \right] \quad \quad \mathbf{T}_\text{drug} = \left[ \begin{matrix} `r transition_drug[1,1]` &  `r transition_drug[1,2]` &  `r transition_drug[1,3]` \\ `r transition_drug[2,1]` &  `r transition_drug[2,2]` &  `r transition_drug[2,3]`
+\\ `r transition_drug[3,1]` &  `r transition_drug[3,2]` &  `r transition_drug[3,3]` \end{matrix} \right].
+\end{equation*}
+These estimates are close to those of the MAR model, indicating little initial difference between the conditions, but effectiveness of the drugs in the transition probabilities, which are higher towards the less severe states than for the placebo condition.
+```{r missingness-probabilities-HMM}
+coef1 <- getpars(fmod_miss_3state)[27:29]
+coef2 <- getpars(fmod_miss_3state)[32:34]
+coef3 <- getpars(fmod_miss_3state)[37:39]
+pmat <- cbind(1,0:6,c(1,1,0,1,0,0,1))
+hmm_miss_pred <- rbind(
+  data.frame(state = 1, week = 0:6, prob = 1/(1+exp(-pmat%*%coef1))),
+  data.frame(state = 2, week = 0:6, prob = 1/(1+exp(-pmat%*%coef2))),
+  data.frame(state = 3, week = 0:6, prob = 1/(1+exp(-pmat%*%coef3))))
+```
+
+```{r conditional-missingness-parameters, warning=FALSE, message=FALSE, cache=TRUE}
+hmmci <- confint(fmod_miss_3state)
+tab <- cbind(c("1","","","2","","","3","",""),c("(Intercept)","week","main"),hmmci[c(27:29,32:34,37:39),c(1,3,4)])
+tab <- as.data.frame(tab)
+knitr::kable(tab, digits=3, row.names = FALSE, col.names = c("state","parameter","estimate","lower","upper"), booktabs=TRUE, linesep=c("","","\\addlinespace"), caption = "Parameter estimates of the state dependent logistic regression models for missingness, with lower and upper reflecting the lower and upper bounds of the approximate $95\\%$ confidence intervals.")
+```
+
+Results of the state-dependent models for missingness are provided in Table \ref{tab:conditional-missingness-parameters}. For all three states, the confidence interval for the effect of `main` excludes 0, indicating a significantly lower proportion of missing ratings at the main measurement weeks. In state 1 and 3, the confidence interval for the effect of `week` also excludes 0, indicating a higher rate of missing ratings over time, possibly due to attrition. For state 2, the effect of `week` is not significant. Figure \ref{fig:hmm-missing-prediction} depicts the predicted probability of missing ratings for each state and week. This shows that in state 2, the chance of missing data on the main measurement weeks is small at $p(M_t|S_t = 2)=`r round(mean(subset(hmm_miss_pred, state == 2 & week %in% c(0,1,3,6))$prob),3)`$, while it is high at $p(M_t|S_t = 2) = `r round(mean(subset(hmm_miss_pred, state == 2 & week %in% c(2,4,5))$prob),3)`$ on the other weeks. In the other states, the probabilities are less extreme, with missing (and non-missing) data occurring on the main measurement weeks and the other weeks as well. In the final week 6, those in the most severe state 3 are the most likely to have missing data with $p(M_t|S_t = 3) = `r round(mean(subset(hmm_miss_pred, state == 3 & week %in% c(6))$prob),3)`$. For those in the least severe state 1, the probability of missingness in week 6 is also substantial at $p(M_t|S_t = 1) = `r round(mean(subset(hmm_miss_pred, state == 1 & week %in% c(6))$prob),3)`$.
+
+```{r hmm-missing-prediction, echo=FALSE, fig.cap="Predicted probability of missing IMPS Item 79 ratings by week for each state in the three-state MNAR hidden Markov model.", out.width="60%", fig.align='center', fig.width=5, fig.height=2.5}
+hmm_miss_pred %>%
+  mutate(state=as.factor(state)) %>%
+  ggplot(aes(x=week, y=prob, colour=state)) + geom_line() + ylab("p(missing)") + theme_minimal()
+# plot(c(0,6),c(0,1),type="n",xlab="week",ylab="p(missing)")
+# lines(0:6,1/(1+exp(-pmat%*%coef1)),lty=1)
+# lines(0:6,1/(1+exp(-pmat%*%coef2)),lty=2)
+# lines(0:6,1/(1+exp(-pmat%*%coef3)),lty=3)
+# legend(0,1,legend=c("S1","S2","S3"),lty=1:3)
+```
+
+
+```{r constrained-state-dependent, cache=TRUE, warning=FALSE, results='hide'}
+
+# formulate a missing model which is state-independent
+conpat <- as.numeric(getpars(fmod_miss_3state) != 0)
+conpat[27] <- conpat[32] <- conpat[37] <- 2
+conpat[28] <- conpat[33] <- conpat[38] <- 3
+conpat[29] <- conpat[34] <- conpat[39] <- 4
+fmod_missIndep_3state <- fit(mod_miss_3state, equal=conpat, method="donlp")
+# compare to state-dependent missingness
+llr <- llratio(fmod_miss_3state, fmod_missIndep_3state)
+```
+Disregarding the modelling of missingness, the parameters of the MAR and MNAR model seem reasonably close. This could be an indication that missingness is independent of the hidden states and data are possibly MAR. The likelihood of the MAR is not directly comparable to that of the MNAR model, as the latter is defined over two variables (the rating and the binary `missing` variable), while the former involves just a single variable. However, we can test for equivalence by fitting a constrained version of the MNAR model, where the parameters of the missingness model are constrained to be identical over the states. Unlike the MAR model, this restricted version of the MNAR model accounts for patterns of missingness, allowing these to depend on `week` and `main`, but not on the hidden state. A likelihood ratio test indicates that this restricted model fits less well, $\chi^2(6) = `r round(llr@value,2)`$ $p < .001$. Hence, there is evidence that the MNAR model is preferable to the MAR model and that missingness is indeed state-dependent.
+
+```{r imps74-posterior-state-plots, fig.cap = "Proportions of maximum a posteriori (MAP) state assignments over weeks for the medication and placebo groups, according to the MAR and MNAR model.", out.width='70%', fig.align="center"}
+rbind(data.frame(model="MNAR", week=0:6, state = 1, drug = dat$drug, count = posterior(fmod_miss_3state, type="global") == 1),
+      data.frame(model="MNAR", week=0:6, state = 2, drug = dat$drug, count = posterior(fmod_miss_3state, type="global") == 2),
+      data.frame(model="MNAR", week=0:6, state = 3,  drug = dat$drug, count = posterior(fmod_miss_3state, type="global") == 3),
+      data.frame(model="MAR", week=0:6, state = 1,  drug = dat$drug, count = posterior(fmod_nomiss_3state, type="global") == 1),
+      data.frame(model="MAR", week=0:6, state = 2,  drug = dat$drug, count = posterior(fmod_nomiss_3state, type="global") == 2),
+      data.frame(model="MAR", week=0:6, state = 3,  drug = dat$drug, count = posterior(fmod_nomiss_3state, type="global") == 3)) %>%
+  mutate(state = factor(state),
+         drug = factor(drug, labels = c("placebo","medicine"))) %>%
+  group_by(model, state, week, drug) %>%
+  summarize(p = mean(count)) %>%
+    ggplot(aes(x=week, y = p, group = state, colour = state)) + geom_line() + facet_grid(model ~ drug) + theme_bw() + ylab("prop(state)")
+
+```
+
+Whilst the MAR and MNAR model provide roughly equivalent parameters for the severity ratings in the three states, when comparing the maximum a posteriori (MAP) state classifications from the Viterbi algorithm (Figure \ref{fig:imps74-posterior-state-plots}), we see that state classifications for the the MAR model tend to be for the more severe states. According to the MNAR model, during the main measuring weeks, missing values are relatively likely in the least severe state 1. Hence, those with missing values are more likely to be assigned to the least severe state. This is in line with the analysis of @hedeker1997application, who found evidence that dropouts in the medication condition showed more improvement in their symptoms.
+
+It is worthwhile to note that the MAP states are also determined for time points with missing data, as the transition probabilities make certain states more probable than others, even when there is no direct measurement available. This provides a potentially meaningful basis to impute missing values, with another option being expected rating as a function of the posterior probability of all states. As imputation is not the focus of this study, we leave this to be investigated in future work. 
+
+# Discussion
+
+Previous work on missing data in hidden Markov models has mostly focussed on cases where missing values are assumed to be missing at random (MAR). Here, we addressed situations where data is missing not at random (MNAR), and missingness depends on the hidden states. Simulations showed that including a submodel for state-dependent missingness in a HMM is beneficial when missingness is indeed state-dependent, whilst relatively harmless when data is MAR. However, when the form of state-dependent missingness is misspecified (e.g. the effect of measurable covariates on missingness ignored), results may be biased. In practice, it is therefore advisable to consider the potential effect of covariates in the state-dependent missingness models. A reasonable strategy is to first model patterns of missingness through e.g. logistic regression, and then include important predictors from this analysis into the state-dependent missingness models. Applying this strategy to a real example about severity of schizophrenia in a clinical trial with substantial missing data, we showed that assuming data is MAR may lead to possible misclassification of patients to states (towards more severe states in this example). Whilst the ground truth is unavailable in such real applications, model comparison can be used to justify a state-dependent missingness model. Using flexible analysis tools such as the depmixS4 package [@depmixS4] makes specifying, estimating, and comparing hidden Markov models with missing data specifications straightforward. There is then little reason to ignore potentially non-ignorable patterns of missing data in hidden Markov modelling.
+
+Another approach to dealing with non-ignorable missingness (MNAR) is the pattern-mixture approach of Little [-@little1993pattern; -@little1994class]. The main idea of this approach is to group units of observations (e.g. patients) by the pattern of missing data, and allowing the parameters of a statistical model for the observations $Y$ to dependent on the missingness _pattern_ $M_{1:\nT}$. There are certain similarities between this approach and modelling missingness as state-dependent. Rather than conditionalizing on a pattern of missing values, a hidden Markov model conditionalizes on a pattern (sequence) of hidden states, $\fstate_{1:\nT}$, and the marginal distribution of the observations is effectively a multivariate mixture 
+\begin{equation}
+\dens(\obs_{1:\nT} | \modpar) = \sum_{\fstate_{1:\nT} \in \mathcal{S}^\nT}  \sum_{m_{1:\nT} \in \mathcal{M}^\nT} \dens(\obs_{1:\nT} | m_{1:\nT} , \fstate_{1:\nT}, \modpar) \dens(m_{1:\nT} | \fstate_{1:\nT}, \modpar) \dens(\fstate_{1:\nT} | \modpar)
+\end{equation}
+(note that $\modpar$ here includes all parameters, so $\phi$). A pattern-mixture model would instead propose
+\begin{equation}
+\dens(\obs_{1:\nT} | \modpar) = \sum_{m_{1:\nT} \in \mathcal{M}^\nT} \dens(\obs_{1:\nT} | m_{1:\nT}, \modpar) \dens(m_{1:\nT} | \modpar) .
+\end{equation}
+Trivially, if we set the number of hidden states to $\ns = 1$, both models are the same. Another trivial equivalence is through a one-to-one mapping between $m_{1:\nT}$ and $\fstate_{1:\nT}$. This could be obtained of by setting $\ns = 2$, assuming the Markov process is of order $\nT$, and fixing e.g. $\Prob(M_{t} = 0|\state = 1) = 1$ and $\Prob(M_{t} = 1|\state = 2) = 1$.
+More interesting is to investigate cases where the procedures are similar, but not necessarily equivalent. The general pattern-mixture model is often underidentified [@little1993pattern]. For time-series of length $\nT$, there are $2^\nT$ possible missing data patterns. Without further restrictions, estimating the mean vectors and covariance matrices for all these components is not possible, due to the structural missing data in those patterns. The state-dependent MNAR hidden Markov model is identifiable insofar as the HMM for the observed variable $\obs$ is identifiable. It is convenient, but not necessary, to assume a first-order Markov process. Higher-order Markov processes may allow the model to capture complex effects of missingness. Another option is to use the missingness indicator $M_t$ as a covariate on initial and transition probabilities, rather than a dependent variable. We leave investigation of such alternative models to future work.
+
+```{r session-info}
+writeLines(capture.output(sessionInfo()), "sessionInfo.txt")
+```
