@@ -1,6 +1,6 @@
 ---
 title: Ignorable and non-ignorable missing data in hidden Markov models
-blinded: 0
+blinded: 1
 authors:
 - name: Maarten Speekenbrink
   affiliation: Department of Experimental Psychology, University College London
@@ -46,6 +46,8 @@ library(dplyr)
 library(ggplot2)
 library(depmixS4)
 ```
+
+\spacingset{1.9}
 
 # Introduction
 
@@ -194,7 +196,7 @@ p2 <- ggplot() + geom_function(fun = dnorm, args = list(mean = -1, sd = 3)) + ge
 grid.arrange(p1, p2, ncol=2) 
 ```
 
-To assess the potential benefits of including a state-dependent missingness model in a HMM, we conducted a simulation study, focussing on a three-state hidden Markov model with a univariate Normal distributed response variable^[All code for the simulations, and the analysis of the application, is available at https://github.com/depmix/hmm-missing-data-paper.]. We simulated four scenario's. In Simulation 1 and 2 (Figure \ref{fig:simulation-response-distributions}), the states are reasonably well-separated, with means $\mu_1 = -1$, $\mu_2 = 0$, $\mu_3 = 1$ and standard deviations $\sigma_1 = \sigma_2 = \sigma_3 = 1$. Note that there is still considerable overlap in the state-conditional response distributions, as would be expected in many real applications of HMMs. In Simulation 1, missingness was state-dependent (i.e. MNAR), with $\Prob(M_t = 1|S_t = 1) = .05$, $\Prob(M_t = 1|S_t = 2) = .25$, and $\Prob(M_t = 1|S_t = 2) = .5$. In Simulation 2, missingness was independent of the state (MAR), with $\Prob(M_t = 1|S_t = i) = \Prob(M_t = 1) = .25$. In Simulation 3 and 4 (Figure \ref{fig:simulation-response-distributions}), the states were rather less well-separated, with means as for Simulation 1 and 2, but standard deviations $\sigma_i = 3$. Here, the overlap of the state-conditional response distributions is much higher than in Simulation 1 and 2, and identification of the hidden states will be more difficult. In Simulation 3, missingness was state-dependent (MNAR) in the same manner as Simulation 1, while in Simulation 4, missingness was state-independent (MAR) as for Simulation 2. In all simulations, the initial state probabilities were $\pi_1 = \Prob(S_1 = 1) = .8$, $\pi_2 = \pi_3 = .1$, and the state-transition matrix was
+To assess the potential benefits of including a state-dependent missingness model in a HMM, we conducted a simulation study, focussing on a three-state hidden Markov model with a univariate Normal distributed response variable^[All code for the simulations, and the analysis of the application, is available at <!--https://osf.io/zj3a7/?view_only=8771376b128848589b846014b56f371a.-->https://www.github.com/depmix/hmm-missing-data-paper.]. We simulated four scenario's. In Simulation 1 and 2 (Figure \ref{fig:simulation-response-distributions}), the states are reasonably well-separated, with means $\mu_1 = -1$, $\mu_2 = 0$, $\mu_3 = 1$ and standard deviations $\sigma_1 = \sigma_2 = \sigma_3 = 1$. Note that there is still considerable overlap in the state-conditional response distributions, as would be expected in many real applications of HMMs. In Simulation 1, missingness was state-dependent (i.e. MNAR), with $\Prob(M_t = 1|S_t = 1) = .05$, $\Prob(M_t = 1|S_t = 2) = .25$, and $\Prob(M_t = 1|S_t = 2) = .5$. In Simulation 2, missingness was independent of the state (MAR), with $\Prob(M_t = 1|S_t = i) = \Prob(M_t = 1) = .25$. In Simulation 3 and 4 (Figure \ref{fig:simulation-response-distributions}), the states were rather less well-separated, with means as for Simulation 1 and 2, but standard deviations $\sigma_i = 3$. Here, the overlap of the state-conditional response distributions is much higher than in Simulation 1 and 2, and identification of the hidden states will be more difficult. In Simulation 3, missingness was state-dependent (MNAR) in the same manner as Simulation 1, while in Simulation 4, missingness was state-independent (MAR) as for Simulation 2. In all simulations, the initial state probabilities were $\pi_1 = \Prob(S_1 = 1) = .8$, $\pi_2 = \pi_3 = .1$, and the state-transition matrix was
 \begin{equation*}
 \mat{A} = \left[ \begin{matrix} .75 &  .125 & .125 \\ .125 & .75 & .125 \\ .125 & .125 & .75
 \end{matrix} \right] .
