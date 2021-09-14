@@ -21,10 +21,6 @@ study from https://hedeker.people.uic.edu/SCHIZREP.DAT.txt. If that dataset
 is no longer retrievable from this address, a copy should be available from
 https://web.archive.org/web/20100731195849/http://tigger.uic.edu/~hedeker/SCHIZREP.DAT.txt
 
-The `kableExtra` package adds the line `\usepackage{pdflscape}` to the resulting LaTeX file. 
-This should be subsequently deleted or commented out, as it puts the whole document in landscape 
-mode 
-
 ## Simulations
 
 Code for running the simulation studies is provided in the files `simulation1.R` 
