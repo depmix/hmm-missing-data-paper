@@ -1,19 +1,24 @@
 ---
 title: Ignorable and non-ignorable missing data in hidden Markov models
-blinded: 1
-authors:
-- name: Maarten Speekenbrink
-  affiliation: Department of Experimental Psychology, University College London
-  email: m.speekenbrink\@ucl.ac.uk
-  thanks: The authors would like to thank Don Hedeker for sharing the data of the Schizophrenia clinical trial.
-- name: Ingmar Visser
-  affiliation: Department of Developmental Psychology, University of Amsterdam
-  email: i.visser\@uva.nl
+short_title: Missing data in hidden Markov models
+author: Maarten Speekenbrink
+short_author: Speekenbrink & Visser
+affiliation: Department of Experimental Psychology, University College London
+address: 26 Bedford Way
+city: London
+country: England
+email: m.speekenbrink\@ucl.ac.uk
+author2: Ingmar Visser
+affiliation2:  Department of Developmental Psychology, University of Amsterdam
+address2: Nieuwe Achtergracht 129B
+city2: Amsterdam
+country2: The Netherlands
+email2: i.visser\@uva.nl
 keywords:
 - hidden Markov models, missing data, missing not at random, state-dependent missing data, attrition
 citation_package: natbib
 bibliography: refs.bib
-biblio-style: apalike
+biblio-style: rss
 abstract: |
   We consider missing data in the context of hidden Markov models with a focus 
   on situations where data is missing not at random (MNAR) and missingness 
@@ -29,9 +34,9 @@ abstract: |
   application of the state- and time-dependent MNAR hidden Markov model to a 
   real dataset, involving severity of schizophrenic symptoms in a clinical 
   trial.
-classoption: 12pt
+classoption: mathptm, crc, oneside
 output:
-  rticles::asa_article:
+  rticles::rss_article:
     includes:
       in_header: preamble.tex
 ---
@@ -46,8 +51,6 @@ library(dplyr)
 library(ggplot2)
 library(depmixS4)
 ```
-
-\spacingset{1.9}
 
 # Introduction
 
@@ -188,7 +191,7 @@ nrep <- 100
 nt <- 50
 ```
 
-```{r simulation-response-distributions, echo=FALSE, fig.cap="State-conditional response distributions in the simulation studies. In Simulation 1 and 2, states are reasonably well-separated, although there is still considerable overlap of the distributions. In Simulation 3 and 4, states less well-separated.", fig.width=8, fig.height=3, out.width="\\linewidth"}
+```{r simulation-response-distributions, echo=FALSE, fig.cap="State-conditional response distributions in the simulation studies. In Simulation 1 and 2, states are reasonably well-separated, although there is still considerable overlap of the distributions. In Simulation 3 and 4, states are less well-separated.", fig.width=8, fig.height=3, out.width="\\linewidth"}
 library(ggplot2)
 library(gridExtra)
 p1 <- ggplot() + geom_function(fun = dnorm, args = list(mean = -1, sd = 1)) + geom_function(fun = dnorm, args = list(mean = 0, sd = 1)) + geom_function(fun = dnorm, args = list(mean = 1, sd = 1)) + ggtitle("Simulation 1 and 2") + xlim(-6,6) + ylab("p(Y|S)") + xlab("") + theme_bw()
@@ -680,7 +683,7 @@ tabsim1 %>%
             escape=FALSE,
             digits = 3,
             linesep = c('', '', '\\addlinespace')) %>%
-        kable_styling() %>%
+        kable_styling(latex_options = c("scale_down"), position="left") %>%
           add_header_above(c(" " = 1, " " = 1, "MAR" = 3, "MNAR" = 3, " " = 1))
 ```
 
@@ -702,7 +705,7 @@ tabsim2 %>%
             row.names = FALSE,
             digits = 3,
             linesep = c('', '', '\\addlinespace')) %>%
-        kable_styling() %>%
+        kable_styling(latex_options = c("scale_down"), position="left") %>%
           add_header_above(c(" " = 1, " " = 1, "MAR" = 3, "MNAR" = 3, " " = 1))
 ```
 
@@ -723,7 +726,7 @@ tabsim3 %>%
             row.names = FALSE,
             digits = 3,
             linesep = c('', '', '\\addlinespace')) %>%
-        kable_styling() %>%
+        kable_styling(latex_options = c("scale_down"), position="left") %>%
           add_header_above(c(" " = 1, " " = 1, "MAR" = 3, "MNAR" = 3, " " = 1))
 ```
 
@@ -744,7 +747,7 @@ tabsim4 %>%
             row.names = FALSE,
             digits = 3,
             linesep = c('', '', '\\addlinespace')) %>%
-        kable_styling() %>%
+        kable_styling(latex_options = c("scale_down"), position="left") %>%
           add_header_above(c(" " = 1, " " = 1, "MAR" = 3, "MNAR" = 3, " " = 1))
 ```
 
@@ -790,7 +793,7 @@ tabsim5[c(7:9,13:15,10:12,16:24,4:6,1:3,25:27),] %>%
             escape=FALSE,
             digits = 3,
             linesep = c('', '', '\\addlinespace')) %>%
-        kable_styling(latex_options = c("scale_down")) %>%
+        kable_styling(latex_options = c("scale_down"), position="left") %>%
           add_header_above(c(" " = 1, " " = 1, "MAR" = 3, "MNAR (state)" = 3, "MNAR (time)" = 3, " " = 2))
 ```
 The results (Table \ref{tab:table-simulation-5}) show that, compared to the MAR model, the MNAR model which misspecifies missingness as state-dependent is inferior, resulting in more biased parameter estimates. Over all parameters, the relative MAE of these two models is `r round(mean(tabsim5$percMAE1,na.rm=TRUE),3)` on average, indicating the MAR model outperforms the MNAR (state) model. To account for the increase in missing values later in time, the MNAR (state) model estimates the probability of missingness as highest for state 2, which is estimated to have a mean of close to 0, but an increased standard deviation to incorporate observations from the other two states. To make state 2 more prevalent over time, transition probabilities to state 2 are relatively low from state 1 and 2 (parameters $a_{12}$ and $a_{32}$ respectively), whilst self-transitions ($a_{22}$) are close to 1 (meaning that once in state 2, the hidden state sequence is very likely to remain in that state. The prevalence of state 2 is thus increasing over time, and as this state has a higher probability of missingness, so is the prevalence of missing values. 
