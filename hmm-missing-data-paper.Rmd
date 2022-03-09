@@ -1,6 +1,6 @@
 ---
-title: Ignorable and non-ignorable missing data in hidden Markov models
-short_title: Missing data in hidden Markov models
+title: State-dependent missingness in hidden Markov models, with an application to drop-out
+short_title: State-dependent missing data in hidden Markov models
 author: Maarten Speekenbrink
 short_author: Speekenbrink & Visser
 affiliation: Department of Experimental Psychology, University College London
@@ -22,7 +22,7 @@ biblio-style: rss
 abstract: |
   We consider missing data in the context of hidden Markov models with a focus 
   on situations where data is missing not at random (MNAR) and missingness 
-  depends on the identity of the hidden states. In simulations, we show that 
+  depends on the identity of the latent states. In simulations, we show that 
   including a submodel for state-dependent missingness reduces bias when data 
   is MNAR and state-dependent, whilst not reducing accuracy when data is missing 
   at random (MAR). When missingness depends on time but not the hidden states, 
@@ -53,6 +53,8 @@ library(depmixS4)
 ```
 
 # Introduction
+
+In longitudinal studies, 
 
 There is relatively little work on dealing with missing data in hidden Markov models. @albert2000transitional, @deltour1999stochastic, and @yeh2010estimating consider missing data in observed Markov chains. @paroli2002parameter consider calculation of the likelihood of a Gaussian hidden Markov model when observations are missing at random. @yeh2012intermittent discuss the impact of ignoring missingness when missing data is, and is not, ignorable. They show that if missingness depends on the hidden states, i.e. missingness is state-dependent, this results in biased parameter estimates when this missingness is ignored. However, they offer no solution to this problem. The objective of this paper is to do so. Our approach is related to the work of @yu2003semimarkov who allowed for state-dependent missingness in a hidden semi-Markov model with discrete (categorical) outcomes. Following @bahl1983maximum, their solution is to code missingness into a special "null value" of the observed variable, effectively making the variable fully observed. Here, we instead model missingness with an additional (fully observed) indicator variable. This, we believe, is conceptually simpler, and makes it straightforward to add additional covariates to model the probability of missing values.
 
