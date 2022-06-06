@@ -1,6 +1,6 @@
 ---
-title: Ignorable and non-ignorable missing data in hidden Markov models
-short_title: Missing data in hidden Markov models
+title: State-dependent missingness in hidden Markov models, with an application to drop-out
+short_title: State-dependent missing data in hidden Markov models
 author: Maarten Speekenbrink
 short_author: Speekenbrink & Visser
 affiliation: Department of Experimental Psychology, University College London
@@ -22,7 +22,7 @@ biblio-style: rss
 abstract: |
   We consider missing data in the context of hidden Markov models with a focus 
   on situations where data is missing not at random (MNAR) and missingness 
-  depends on the identity of the hidden states. In simulations, we show that 
+  depends on the identity of the latent states. In simulations, we show that 
   including a submodel for state-dependent missingness reduces bias when data 
   is MNAR and state-dependent, whilst not reducing accuracy when data is missing 
   at random (MAR). When missingness depends on time but not the hidden states, 
