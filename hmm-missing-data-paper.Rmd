@@ -54,7 +54,9 @@ library(depmixS4)
 
 # Introduction
 
-There is relatively little work on dealing with missing data in hidden Markov models. @albert2000transitional, @deltour1999stochastic, and @yeh2010estimating consider missing data in observed Markov chains. @paroli2002parameter consider calculation of the likelihood of a Gaussian hidden Markov model when observations are missing at random. @yeh2012intermittent discuss the impact of ignoring missingness when missing data is, and is not, ignorable. They show that if missingness depends on the hidden states, i.e. missingness is state-dependent, this results in biased parameter estimates when this missingness is ignored. However, they offer no solution to this problem. The objective of this paper is to do so. Our approach is related to the work of @yu2003semimarkov who allowed for state-dependent missingness in a hidden semi-Markov model with discrete (categorical) outcomes. Following @bahl1983maximum, their solution is to code missingness into a special "null value" of the observed variable, effectively making the variable fully observed. Here, we instead model missingness with an additional (fully observed) indicator variable. This, we believe, is conceptually simpler, and makes it straightforward to add additional covariates to model the probability of missing values.
+Hidden Markov models [@Rabiner1989; @visser2021hidden] are suitable for categorical or metric time-series and longitudinal data governed by an underlying discrete process. In the context of longitudinal data, these models are also known as latent Markov models [@bartolucci2012latent]. 
+
+There is relatively little work on dealing with missing data in hidden Markov models. @albert2000transitional, @deltour1999stochastic, and @yeh2010estimating consider missing data in observed Markov chains. @paroli2002parameter consider calculation of the likelihood of a Gaussian hidden Markov model when observations are missing at random. @yeh2012intermittent discuss the impact of ignoring missingness when missing data is, and is not, ignorable. They show that if missingness depends on the hidden states, i.e. missingness is state-dependent, this results in biased parameter estimates when this missingness is ignored. However, they offer no solution to this problem. The objective of this paper is to do so. Our approach is related to the work of @yu2003semimarkov who allowed for state-dependent missingness in a hidden semi-Markov model with discrete (categorical) outcomes. Following @bahl1983maximum, their solution is to code missingness into a special "null value" of the observed variable, effectively making the variable fully observed. Here, we instead model missingness with an additional (fully observed) indicator variable. This, we believe, is conceptually simpler, and makes it straightforward to add additional covariates to model the probability of missing values. This approach is also taken by @bartolucci2015discrete, who restrict their model to the case of dropout in longitudinal data (where data is complete up to the point of dropout, after which all data is missing) rather than missing data more generally (where data can be missing at any time point).
 
 The remainder of this paper is organized as follows: We start with a brief overview of hidden Markov models and the formal treatment of ignorable and non-ignorable missing data as established by @rubin1976inference and @little2014statistical, with a focus on hidden Markov models. We then consider state-dependent missingness in hidden Markov models, and show in simulation studies how including a submodel for state-dependent missingness provides better estimates of the model parameters. When data is in fact missing at random, the model with state-dependent missingness is not fundamentally biased, although care must be taken to include relevant covariates, such as e.g. time. We conclude with an application of the method to a real dataset, involving severity of schizophrenic symptoms in a clinical trial.
 
@@ -86,7 +88,7 @@ where the summation is over all possible state sequences (i.e. $\mathcal{S}^T$ i
 
 ## Missing data
 
-The canonical references for statistical inference with missing data are @rubin1976inference and @little2014statistical. Here we summarise the main ideas and results from those sources, as relevant to the present topic. 
+The canonical references for statistical inference with missing data are @rubin1976inference and @little2014statistical. Here we summarise the main ideas and results from those sources, as relevant to the present topic. For ease of presentation, we focus on the case of a single time-series $\obs_{1:\nT}$
 
 Let $\obs_{1:\nT}$, the sequence of all response variables, be partitioned into a set of observed values, $\mathcal{\obs}_{\text{obs}} \subseteq \obs_{1:\nT}$, and a set of missing values, $\mathcal{\obs}_{\text{miss}} \subseteq \obs_{1:\nT}$. Let $M_{1:\nT}$ be vector of indicator variables with values $M_t = 1$ if $\obs_t \in \mathcal{\obs}_{\text{miss}}$ (the observation at time $t$ is missing), and $M_t = 0$ otherwise. In addition to $\modpar$, the parameters of the hidden Markov model for the observed data $\obs$, let $\gvc{\phi}$ denote the parameter vector of the statistical model of missingness (i.e. the model of $M_{1:\nT}$).
 
@@ -178,6 +180,16 @@ L_\text{full}(\modpar,\gvc{\phi}|\mathcal{\obs}_{\text{obs}},M_{1:\nT}) &\propto
 &= \sum_{\fstate_{1:\nT} \in \mathcal{S}^\nT}  \dens{(M_{1:\nT}|\fstate_{1:\nT},\gvc{\phi})} \times \dens{(\mathcal{\obs}_{\text{obs}}, \fstate_{1:\nT} |\modpar)} .
 \end{align*}
 This shows that, although $M$ does not directly depend on $\mathcal{\obs}_\text{miss}$, because both $M$ and $Y$ depend on $\state$, the role of the $\dens{(M|\state,\gvc{\phi})}$ term is more than a scaling factor in the likelihood, and hence missingness is not ignorable.
+
+## Longitudinal data
+
+The results above are easily generalized to the case of longitudinal data, where there are multiple time-series. Let $Y_{1:N,1:T_i} = (Y_{1,1:T_1}, Y_{2,1:T_2},\ldots,Y_{n,1:T_n}$ denote a set of time-series $Y^{i}_{1:T_i}$, each of length $T_i$. 
+
+\begin{align*}
+L_\text{full}(\modpar,\gvc{\phi}|\mathcal{\obs}_{\text{obs}},M_{1:N,1:\nT_i}) &\propto \sum_{\fstate_{1:N,1:\nT} \in \mathcal{S}^\nT} \int \dens{(\mathcal{\obs}_{\text{obs}},\mathcal{\obs}_{\text{miss}}, \fstate_{1:\nT} |\modpar)} \dens{(M_{1:\nT}|\mathcal{\obs}_{\text{obs}},\mathcal{\obs}_{\text{miss}},\fstate_{1:\nT},\gvc{\phi})} d \mathcal{\obs}_\text{miss} \\
+&= \sum_{\fstate_{1:\nT} \in \mathcal{S}^\nT}  \dens{(M_{1:\nT}|\fstate_{1:\nT},\gvc{\phi})} \times \int \dens{(\mathcal{\obs}_{\text{obs}},\mathcal{\obs}_{\text{miss}}, \fstate_{1:\nT} |\modpar)} d \mathcal{\obs}_\text{miss} \\
+&= \sum_{\fstate_{1:\nT} \in \mathcal{S}^\nT}  \dens{(M_{1:\nT}|\fstate_{1:\nT},\gvc{\phi})} \times \dens{(\mathcal{\obs}_{\text{obs}}, \fstate_{1:\nT} |\modpar)} .
+\end{align*}
 
 ## Overview
 
