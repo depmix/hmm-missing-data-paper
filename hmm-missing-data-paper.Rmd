@@ -241,7 +241,102 @@ load("simulation4.Rdata")
 sim4 <- out
 load("simulation5.Rdata")
 sim5 <- out
+load("simulation6.Rdata")
+sim6 <- out
+load("simulation7.Rdata")
+sim7 <- out
+load("simulation8.Rdata")
+sim8 <- out
+load("simulation9.Rdata")
+sim9 <- out
 
+
+convert_simulation <- function(sim, truepars, orderpars) {
+  # sim is list with simulation results
+  # truepars is named list with true values of the parameters
+  # orderpars is list of functions to reorder the parameters in canonical form (e.g. ordered by means). Should return a list with elements "pars" (parameters) and "ord" (order) 
+  
+  nsim <- length(sim)
+  nmod <- length(truepars)
+  
+  est <- list()
+  #bias <- list()
+  pcorstate <- list()
+  
+  for(m in 1:nmod) {
+    est[[m]] <- matrix(0.0,ncol=length(truepars[[m]]),nrow=nsim)
+    colnames(est[[m]]) <- names(sim[[1]][[m]][[1]])
+    #bias[[m]] <- matrix(0.0,ncol=length(truepars[[m]]),nrow=nsim)
+    #colnames(bias[[m]]) <- names(sim[[1]][[m]][[1]])
+    pcorstate[[m]] <- rep(0.0,nsim)
+  }
+  
+  for(i in 1:nsim) {
+    for(m in 1:nmod) {
+       tmp <- sim[[i]][[m]][[1]]
+       tmp <- orderpars[[m]](tmp)
+       est[[m]][i,] <- tmp$pars
+       #bias[[m]][i,] <- tmp$pars - truepars[[m]]
+       fsta <- recode(sim[[i]][[m]]$viterbi,`1` = which(tmp$ord == 1), `2` = which(tmp$ord == 2), `3` = which(tmp$ord == 3))
+       pcorstate[[m]][i] <- sum(fsta == sim[[i]][[m]]$trueState)/(length(sim[[i]][[m]]$trueState))
+    }
+  }
+  
+  out <- data.frame()
+  for(m in 1:nmod) {
+    tmp <- as.data.frame(est[[m]])
+    colnames(tmp) <- names(truepars[[m]])
+    tmp$mod <- m
+    tmp$sim <- 1:nsim
+    tmp <- tmp %>%
+      pivot_longer(!c(mod,sim), names_to = "param", values_to = "estimate")
+    tmp$true <- rep(truepars[[m]],nsim)
+    out <- rbind(out, tmp)
+  }
+  out$mod <- factor(out$mod, labels = names(truepars))
+  return(list(est = out, pcorstate = pcorstate))
+}
+
+summarise_simulation <- function(sim) {
+  # create table for simulation with two models
+  sim_table <- sim$est %>%
+  filter(!(param %in% c("pnm_1","pnm_2","pnm_3"))) %>%
+  group_by(mod, param) %>%
+    summarize(true = mean(true),
+              mean = mean(estimate),
+              sd = sd(estimate),
+              MAE = mean(abs(true - estimate))) %>%
+      pivot_longer(!c(mod,param), names_to = "measure", values_to = "value") %>%
+      ungroup() %>%
+      pivot_wider(names_from = c(mod, measure), values_from = value) %>%
+      dplyr::select(param, MNAR_true, paste0("MAR_",c("mean","sd","MAE"),sep=""),
+         paste0("MNAR_",c("mean","sd","MAE"),sep="")) %>%
+       mutate(percMAE = MNAR_MAE/MAR_MAE)
+  
+  sim_table[c(1:3,7:9,4:6,10:nrow(sim_table)),]
+}
+
+summarise_simulation3 <- function(sim) {
+  # create table for simulation with three models
+  sim_table <- sim$est %>%
+  filter(!(param %in% c("pnm_1","pnm_2","pnm_3"))) %>%
+  group_by(mod, param) %>%
+    summarize(true = mean(true),
+              mean = mean(estimate),
+              sd = sd(estimate),
+              MAE = mean(abs(true - estimate))) %>%
+      pivot_longer(!c(mod,param), names_to = "measure", values_to = "value") %>%
+      ungroup() %>%
+      pivot_wider(names_from = c(mod, measure), values_from = value) %>%
+      dplyr::select(param, MNAR_time_true, paste0("MAR_",c("mean","sd","MAE"),sep=""),
+         paste0("MNAR_",c("mean","sd","MAE"),sep=""),
+         paste0("MNAR_time_",c("mean","sd","MAE"),sep="")) %>%
+      mutate(percMAE1 = MNAR_MAE/MAR_MAE,
+             percMAE2 = MNAR_time_MAE/MAR_MAE)
+  sim_table[c(7:9,13:15,10:12,16:24,4:6,1:3,25:27),]
+}
+    
+## simulation 1
 # simulation 1
 prior <- c(8,1,1)
 prior <- prior/sum(prior)
@@ -251,31 +346,25 @@ means <- c(-1,0,1)
 sds <- c(1,1,1)
 pmiss <- c(.05,.25,.5)
 #
-truepars1 <- c(prior,transition,as.numeric(rbind(means,sds)))
-truepars2 <- c(prior,transition,as.numeric(rbind(means,sds,1-pmiss,pmiss)))
+truepars <- list()
+truepars[[1]] <- c(prior,transition,as.numeric(rbind(means,sds)))
+names(truepars[[1]]) <- c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","$\\mu_2$","$\\sigma_2$","$\\mu_3$","$\\sigma_3$")
+truepars[[2]] <- c(prior,transition,as.numeric(rbind(means,sds,1-pmiss,pmiss)))
+names(truepars[[2]]) <-  c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","pnm_1","$p(M=1|S=1)$","$\\mu_2$","$\\sigma_2$","pnm_2","$p(M=1|S=2)$","$\\mu_3$","$\\sigma_3$","pnm_3","$p(M=1|S=3)$")
+names(truepars) <- c("MAR","MNAR")
 
-bias1 <- matrix(0.0,ncol=length(truepars1),nrow=nsim)
-bias2 <- matrix(0.0,ncol=length(truepars2),nrow=nsim)
-
-colnames(bias1) <- names(sim1[[1]][[1]][[1]])
-colnames(bias2) <- names(sim1[[1]][[2]][[1]])
-
-pcorstate1 <- rep(0.0,nsim)
-pcorstate2 <- rep(0.0,nsim)
-
-#
-for(sim in 1:nsim) {
-  tmp <- sim1[[sim]][[1]][[1]]
-  pr <- tmp[1:3]
-  trt <- matrix(tmp[4:12],ncol=3)
-  ms <- tmp[c(13,15,17)]
-  sds <- tmp[c(14,16,18)] 
-  ord <- order(ms)
-  bias1[sim,] <- c(pr[ord],trt[ord,ord],as.numeric(rbind(ms[ord],sds[ord]))) - truepars1
-  fsta <- recode(sim1[[sim]][[1]]$viterbi,`1` = which(ord == 1), `2` = which(ord == 2), `3` = which(ord == 3))
-  pcorstate1[sim] <- sum(fsta == sim1[[sim]][[1]]$trueState)/(nrep*nt)
-    
-  tmp <- sim1[[sim]][[2]][[1]]
+orderpars <- list()
+orderpars[[1]] <- function(tmp) {
+   pr <- tmp[1:3]
+   trt <- matrix(tmp[4:12],ncol=3)
+   ms <- tmp[c(13,15,17)]
+   sds <- tmp[c(14,16,18)] 
+   ord <- order(ms)
+   out <- c(pr[ord],trt[ord,ord],as.numeric(rbind(ms[ord],sds[ord])))
+   names(out) <- names(tmp)
+   return(list(pars=out, ord = ord))
+}
+orderpars[[2]] <- function(tmp) {
   pr <- tmp[1:3]
   trt <- matrix(tmp[4:12],ncol=3)
   ms <- tmp[c(13,17,21)]
@@ -283,36 +372,12 @@ for(sim in 1:nsim) {
   ps0 <- tmp[c(15,19,23)]
   ps1 <- tmp[c(16,20,24)]
   ord <- order(ms)
-  bias2[sim,] <- c(pr[ord],trt[ord,ord],as.numeric(rbind(ms[ord],sds[ord],ps0[ord],ps1[ord]))) - truepars2
-  fsta <- recode(sim1[[sim]][[2]]$viterbi,`1` = which(ord == 1), `2` = which(ord == 2), `3` = which(ord == 3))
-  pcorstate2[sim] <- sum(fsta == sim1[[sim]][[2]]$trueState)/(nrep*nt)
+  out <- c(pr[ord],trt[ord,ord],as.numeric(rbind(ms[ord],sds[ord],ps0[ord],ps1[ord])))
+  names(out) <- names(tmp)
+  return(list(pars=out, ord = ord))
 }
-sim1_bias1 <- bias1
-sim1_bias2 <- bias2
-sim1_est1 <- t(t(bias1) + truepars1)
-sim1_est2 <- t(t(bias2) + truepars2)
-sim1_pcorstate1 <- pcorstate1
-sim1_pcorstate2 <- pcorstate2
-
-tmp <- as.data.frame(sim1_est1)
-colnames(tmp) <- c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","$\\mu_2$","$\\sigma_2$","$\\mu_3$","$\\sigma_3$")
-tmp$sim <- 1:nsim
-tmp <- gather(tmp,key="param",value="estimate",-sim)
-tmp$true <- rep(truepars1,each=nsim)
-tmp$method <- "MAR"
-tmp$variance <- "low"
-tmp$missing <- "unequal"
-sim1_est1_long <- tmp
-
-tmp <- as.data.frame(sim1_est2)
-colnames(tmp) <- c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","pnm_1","$p(M=1|S=1)$","$\\mu_2$","$\\sigma_2$","pnm_2","$p(M=1|S=2)$","$\\mu_3$","$\\sigma_3$","pnm_3","$p(M=1|S=3)$")
-tmp$sim <- 1:nsim
-tmp <- gather(tmp,key="param",value="estimate",-sim)
-tmp$true <- rep(truepars2,each=nsim)
-tmp$method <- "MNAR"
-tmp$variance <- "low"
-tmp$missing <- "unequal"
-sim1_est2_long <- tmp
+sim1_conv <- convert_simulation(sim1, truepars, orderpars)
+sim1_table <- summarise_simulation(sim1_conv)
 
 # simulation 2
 prior <- c(8,1,1)
@@ -323,69 +388,15 @@ means <- c(-1,0,1)
 sds <- c(1,1,1)
 pmiss <- c(.25,.25,.25)
 #
-truepars1 <- c(prior,transition,as.numeric(rbind(means,sds)))
-truepars2 <- c(prior,transition,as.numeric(rbind(means,sds,1-pmiss,pmiss)))
+truepars <- list()
+truepars[[1]] <- c(prior,transition,as.numeric(rbind(means,sds)))
+names(truepars[[1]]) <- c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","$\\mu_2$","$\\sigma_2$","$\\mu_3$","$\\sigma_3$")
+truepars[[2]] <- c(prior,transition,as.numeric(rbind(means,sds,1-pmiss,pmiss)))
+names(truepars[[2]]) <-  c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","pnm_1","$p(M=1|S=1)$","$\\mu_2$","$\\sigma_2$","pnm_2","$p(M=1|S=2)$","$\\mu_3$","$\\sigma_3$","pnm_3","$p(M=1|S=3)$")
+names(truepars) <- c("MAR","MNAR")
 
-bias1 <- matrix(0.0,ncol=length(truepars1),nrow=nsim)
-bias2 <- matrix(0.0,ncol=length(truepars2),nrow=nsim)
-
-colnames(bias1) <- names(sim3[[1]][[1]][[1]])
-colnames(bias2) <- names(sim3[[1]][[2]][[1]])
-
-pcorstate1 <- rep(0.0,nsim)
-pcorstate2 <- rep(0.0,nsim)
-
-simi <- sim2
-#
-for(sim in 1:nsim) {
-  tmp <- simi[[sim]][[1]][[1]]
-  pr <- tmp[1:3]
-  trt <- matrix(tmp[4:12],ncol=3)
-  ms <- tmp[c(13,15,17)]
-  sds <- tmp[c(14,16,18)] 
-  ord <- order(ms)
-  bias1[sim,] <- c(pr[ord],trt[ord,ord],as.numeric(rbind(ms[ord],sds[ord]))) - truepars1
-  fsta <- recode(simi[[sim]][[1]]$viterbi,`1` = which(ord == 1), `2` = which(ord == 2), `3` = which(ord == 3))
-  pcorstate1[sim] <- sum(fsta == simi[[sim]][[1]]$trueState)/(nrep*nt)
-
-  tmp <- simi[[sim]][[2]][[1]]
-  pr <- tmp[1:3]
-  trt <- matrix(tmp[4:12],ncol=3)
-  ms <- tmp[c(13,17,21)]
-  sds <- tmp[c(14,18,22)]
-  ps0 <- tmp[c(15,19,23)]
-  ps1 <- tmp[c(16,20,24)]
-  ord <- order(ms)
-  bias2[sim,] <- c(pr[ord],trt[ord,ord],as.numeric(rbind(ms[ord],sds[ord],ps0[ord],ps1[ord]))) - truepars2
-  fsta <- recode(simi[[sim]][[2]]$viterbi,`1` = which(ord == 1), `2` = which(ord == 2), `3` = which(ord == 3))
-  pcorstate2[sim] <- sum(fsta == simi[[sim]][[2]]$trueState)/(nrep*nt)
-}
-sim2_bias1 <- bias1
-sim2_bias2 <- bias2
-sim2_est1 <- t(t(bias1) + truepars1)
-sim2_est2 <- t(t(bias2) + truepars2)
-sim2_pcorstate1 <- pcorstate1
-sim2_pcorstate2 <- pcorstate2
-
-tmp <- as.data.frame(sim2_est1)
-colnames(tmp) <- c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","$\\mu_2$","$\\sigma_2$","$\\mu_3$","$\\sigma_3$")
-tmp$sim <- 1:nsim
-tmp <- gather(tmp,key="param",value="estimate",-sim)
-tmp$true <- rep(truepars1,each=nsim)
-tmp$method <- "MAR"
-tmp$variance <- "low"
-tmp$missing <- "equal"
-sim2_est1_long <- tmp
-
-tmp <- as.data.frame(sim2_est2)
-colnames(tmp) <- c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","pnm_1","$p(M=1|S=1)$","$\\mu_2$","$\\sigma_2$","pnm_2","$p(M=1|S=2)$","$\\mu_3$","$\\sigma_3$","pnm_3","$p(M=1|S=3)$")
-tmp$sim <- 1:nsim
-tmp <- gather(tmp,key="param",value="estimate",-sim)
-tmp$true <- rep(truepars2,each=nsim)
-tmp$method <- "MNAR"
-tmp$variance <- "low"
-tmp$missing <- "equal"
-sim2_est2_long <- tmp
+sim2_conv <- convert_simulation(sim2, truepars, orderpars)
+sim2_table <- summarise_simulation(sim2_conv)
 
 # simulation 3
 prior <- c(8,1,1)
@@ -396,69 +407,15 @@ means <- c(-1,0,1)
 sds <- c(3,3,3)
 pmiss <- c(.05,.25,.5)
 #
-truepars1 <- c(prior,transition,as.numeric(rbind(means,sds)))
-truepars2 <- c(prior,transition,as.numeric(rbind(means,sds,1-pmiss,pmiss)))
+truepars <- list()
+truepars[[1]] <- c(prior,transition,as.numeric(rbind(means,sds)))
+names(truepars[[1]]) <- c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","$\\mu_2$","$\\sigma_2$","$\\mu_3$","$\\sigma_3$")
+truepars[[2]] <- c(prior,transition,as.numeric(rbind(means,sds,1-pmiss,pmiss)))
+names(truepars[[2]]) <-  c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","pnm_1","$p(M=1|S=1)$","$\\mu_2$","$\\sigma_2$","pnm_2","$p(M=1|S=2)$","$\\mu_3$","$\\sigma_3$","pnm_3","$p(M=1|S=3)$")
+names(truepars) <- c("MAR","MNAR")
 
-bias1 <- matrix(0.0,ncol=length(truepars1),nrow=nsim)
-bias2 <- matrix(0.0,ncol=length(truepars2),nrow=nsim)
-
-colnames(bias1) <- names(sim2[[1]][[1]][[1]])
-colnames(bias2) <- names(sim2[[1]][[2]][[1]])
-
-pcorstate1 <- rep(0.0,nsim)
-pcorstate2 <- rep(0.0,nsim)
-
-simi <- sim3
-#
-for(sim in 1:nsim) {
-  tmp <- simi[[sim]][[1]][[1]]
-  pr <- tmp[1:3]
-  trt <- matrix(tmp[4:12],ncol=3)
-  ms <- tmp[c(13,15,17)]
-  sds <- tmp[c(14,16,18)] 
-  ord <- order(ms)
-  bias1[sim,] <- c(pr[ord],trt[ord,ord],as.numeric(rbind(ms[ord],sds[ord]))) - truepars1
-  fsta <- recode(simi[[sim]][[1]]$viterbi,`1` = which(ord == 1), `2` = which(ord == 2), `3` = which(ord == 3))
-  pcorstate1[sim] <- sum(fsta == simi[[sim]][[1]]$trueState)/(nrep*nt)
-
-  tmp <- simi[[sim]][[2]][[1]]
-  pr <- tmp[1:3]
-  trt <- matrix(tmp[4:12],ncol=3)
-  ms <- tmp[c(13,17,21)]
-  sds <- tmp[c(14,18,22)]
-  ps0 <- tmp[c(15,19,23)]
-  ps1 <- tmp[c(16,20,24)]
-  ord <- order(ms)
-  bias2[sim,] <- c(pr[ord],trt[ord,ord],as.numeric(rbind(ms[ord],sds[ord],ps0[ord],ps1[ord]))) - truepars2
-  fsta <- recode(simi[[sim]][[2]]$viterbi,`1` = which(ord == 1), `2` = which(ord == 2), `3` = which(ord == 3))
-  pcorstate2[sim] <- sum(fsta == simi[[sim]][[2]]$trueState)/(nrep*nt)
-}
-sim3_bias1 <- bias1
-sim3_bias2 <- bias2
-sim3_est1 <- t(t(bias1) + truepars1)
-sim3_est2 <- t(t(bias2) + truepars2)
-sim3_pcorstate1 <- pcorstate1
-sim3_pcorstate2 <- pcorstate2
-
-tmp <- as.data.frame(sim3_est1)
-colnames(tmp) <- c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","$\\mu_2$","$\\sigma_2$","$\\mu_3$","$\\sigma_3$")
-tmp$sim <- 1:nsim
-tmp <- gather(tmp,key="param",value="estimate",-sim)
-tmp$true <- rep(truepars1,each=nsim)
-tmp$method <- "MAR"
-tmp$variance <- "high"
-tmp$missing <- "unequal"
-sim3_est1_long <- tmp
-
-tmp <- as.data.frame(sim3_est2)
-colnames(tmp) <- c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","pnm_1","$p(M=1|S=1)$","$\\mu_2$","$\\sigma_2$","pnm_2","$p(M=1|S=2)$","$\\mu_3$","$\\sigma_3$","pnm_3","$p(M=1|S=3)$")
-tmp$sim <- 1:nsim
-tmp <- gather(tmp,key="param",value="estimate",-sim)
-tmp$true <- rep(truepars2,each=nsim)
-tmp$method <- "MNAR"
-tmp$variance <- "high"
-tmp$missing <- "unequal"
-sim3_est2_long <- tmp
+sim3_conv <- convert_simulation(sim3, truepars, orderpars)
+sim3_table <- summarise_simulation(sim3_conv)
 
 # simulation 4
 prior <- c(8,1,1)
@@ -469,69 +426,15 @@ means <- c(-1,0,1)
 sds <- c(3,3,3)
 pmiss <- c(.25,.25,.25)
 #
-truepars1 <- c(prior,transition,as.numeric(rbind(means,sds)))
-truepars2 <- c(prior,transition,as.numeric(rbind(means,sds,1-pmiss,pmiss)))
+truepars <- list()
+truepars[[1]] <- c(prior,transition,as.numeric(rbind(means,sds)))
+names(truepars[[1]]) <- c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","$\\mu_2$","$\\sigma_2$","$\\mu_3$","$\\sigma_3$")
+truepars[[2]] <- c(prior,transition,as.numeric(rbind(means,sds,1-pmiss,pmiss)))
+names(truepars[[2]]) <-  c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","pnm_1","$p(M=1|S=1)$","$\\mu_2$","$\\sigma_2$","pnm_2","$p(M=1|S=2)$","$\\mu_3$","$\\sigma_3$","pnm_3","$p(M=1|S=3)$")
+names(truepars) <- c("MAR","MNAR")
 
-bias1 <- matrix(0.0,ncol=length(truepars1),nrow=nsim)
-bias2 <- matrix(0.0,ncol=length(truepars2),nrow=nsim)
-
-colnames(bias1) <- names(sim4[[1]][[1]][[1]])
-colnames(bias2) <- names(sim4[[1]][[2]][[1]])
-
-pcorstate1 <- rep(0.0,nsim)
-pcorstate2 <- rep(0.0,nsim)
-
-simi <- sim4
-#
-for(sim in 1:nsim) {
-  tmp <- simi[[sim]][[1]][[1]]
-  pr <- tmp[1:3]
-  trt <- matrix(tmp[4:12],ncol=3)
-  ms <- tmp[c(13,15,17)]
-  sds <- tmp[c(14,16,18)] 
-  ord <- order(ms)
-  bias1[sim,] <- c(pr[ord],trt[ord,ord],as.numeric(rbind(ms[ord],sds[ord]))) - truepars1
-  fsta <- recode(simi[[sim]][[1]]$viterbi,`1` = which(ord == 1), `2` = which(ord == 2), `3` = which(ord == 3))
-  pcorstate1[sim] <- sum(fsta == simi[[sim]][[1]]$trueState)/(nrep*nt)
-
-  tmp <- simi[[sim]][[2]][[1]]
-  pr <- tmp[1:3]
-  trt <- matrix(tmp[4:12],ncol=3)
-  ms <- tmp[c(13,17,21)]
-  sds <- tmp[c(14,18,22)]
-  ps0 <- tmp[c(15,19,23)]
-  ps1 <- tmp[c(16,20,24)]
-  ord <- order(ms)
-  bias2[sim,] <- c(pr[ord],trt[ord,ord],as.numeric(rbind(ms[ord],sds[ord],ps0[ord],ps1[ord]))) - truepars2
-  fsta <- recode(simi[[sim]][[2]]$viterbi,`1` = which(ord == 1), `2` = which(ord == 2), `3` = which(ord == 3))
-  pcorstate2[sim] <- sum(fsta == simi[[sim]][[2]]$trueState)/(nrep*nt)
-}
-sim4_bias1 <- bias1
-sim4_bias2 <- bias2
-sim4_est1 <- t(t(bias1) + truepars1)
-sim4_est2 <- t(t(bias2) + truepars2)
-sim4_pcorstate1 <- pcorstate1
-sim4_pcorstate2 <- pcorstate2
-
-tmp <- as.data.frame(sim4_est1)
-colnames(tmp) <- c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","$\\mu_2$","$\\sigma_2$","$\\mu_3$","$\\sigma_3$")
-tmp$sim <- 1:nsim
-tmp <- gather(tmp,key="param",value="estimate",-sim)
-tmp$true <- rep(truepars1,each=nsim)
-tmp$method <- "MAR"
-tmp$variance <- "high"
-tmp$missing <- "equal"
-sim4_est1_long <- tmp
-
-tmp <- as.data.frame(sim4_est2)
-colnames(tmp) <- c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","pnm_1","$p(M=1|S=1)$","$\\mu_2$","$\\sigma_2$","pnm_2","$p(M=1|S=2)$","$\\mu_3$","$\\sigma_3$","pnm_3","$p(M=1|S=3)$")
-tmp$sim <- 1:nsim
-tmp <- gather(tmp,key="param",value="estimate",-sim)
-tmp$true <- rep(truepars2,each=nsim)
-tmp$method <- "MNAR"
-tmp$variance <- "high"
-tmp$missing <- "equal"
-sim4_est2_long <- tmp
+sim4_conv <- convert_simulation(sim4, truepars, orderpars)
+sim4_table <- summarise_simulation(sim4_conv)
 
 # simulation 5
 prior <- c(8,1,1)
@@ -542,9 +445,15 @@ means <- c(-1,0,1)
 sds <- c(1,1,1)
 pmiss <- rep(mean(1/(1+exp(-(-5 + .125*1:50)))),3)
 #
-truepars1 <- c(prior,transition,as.numeric(rbind(means,sds)))
-truepars2 <- c(prior,transition,as.numeric(rbind(means,sds,1-pmiss,pmiss)))
-truepars3 <- c(prior,transition,as.numeric(rbind(means,sds,c(-5,-5,-5),c(.125,.125,.125))))
+truepars <- list()
+truepars[[1]] <- c(prior,transition,as.numeric(rbind(means,sds)))
+names(truepars[[1]]) <- c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","$\\mu_2$","$\\sigma_2$","$\\mu_3$","$\\sigma_3$")
+truepars[[2]] <- c(prior,transition,as.numeric(rbind(means,sds,1-pmiss,pmiss)))
+names(truepars[[2]]) <-  c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","pnm_1","$p(M=1|S=1)$","$\\mu_2$","$\\sigma_2$","pnm_2","$p(M=1|S=2)$","$\\mu_3$","$\\sigma_3$","pnm_3","$p(M=1|S=3)$")
+truepars[[3]] <- c(prior,transition,as.numeric(rbind(means,sds,c(-5,-5,-5),c(.125,.125,.125))))
+names(truepars[[3]]) <- c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","$\\beta_{0,1}$","$\\beta_{\\text{time},1}$", "$\\mu_2$","$\\sigma_2$","$\\beta_{0,2}$","$\\beta_{\\text{time},2}$","$\\mu_3$","$\\sigma_3$","$\\beta_{0,3}$","$\\beta_{\\text{time},3}$")
+names(truepars) <- c("MAR","MNAR","MNAR_time")
+
 
 bias1 <- matrix(0.0,ncol=length(truepars1),nrow=nsim)
 bias2 <- matrix(0.0,ncol=length(truepars2),nrow=nsim)

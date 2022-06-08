@@ -9,9 +9,9 @@ set.seed(202109013)
 randomSeeds <- sample(seq(1,nsim*1000),nsim)
 out <- rep(list(vector("list",3)),nsim)
 
-prior <- c(8,1,1)
+prior <- c(1,1,1)
 prior <- prior/sum(prior)
-transition <- 5*diag(3) + 1
+transition <- 7*diag(3) + 1
 transition <- transition/rowSums(transition)
 means <- c(-1,0,1)
 sds <- c(3,3,3)
@@ -85,6 +85,28 @@ for(sim in 1:nsim) {
       nTry <- nTry + 1
     }
   }
+  
+  set.seed(randomSeeds[sim])
+  mod <- depmix(list(response~1,missing~trial),family=list(gaussian(),binomial()),data=dat,nstates=3,ntimes=rep(nt,nrep))
+  mod <- setpars(mod,truepars3)
+  ok <- FALSE
+  nTry <- 1
+  while(!ok && nTry < 21) {
+    fmod <- try(fit(mod,emcontrol=em.control(maxit = 3000, random.start = nTry > 1),verbose=FALSE))
+    if(!inherits(fmod,"try-error")) {
+      if(fmod@message == "Log likelihood converged to within tol. (relative change)") {
+        cat("mod3 simulation",sim,"iteration",nTry,"completed.\n")
+        out[[sim]][[3]] <- list(pars=getpars(fmod),logLik=logLik(fmod),viterbi=posterior(fmod)[,1],trueState=dat$trueState)
+        ok <- TRUE
+      } else {
+        cat("mod3 simulation",sim,"iteration",nTry,"failed.\n")
+        nTry <- nTry + 1
+      }
+    } else {
+      cat("mod3 simulation",sim,"iteration",nTry,"failed.\n")
+      nTry <- nTry + 1
+    }
+  }
 }
 
 save(out,file="simulation3.Rdata")
@@ -99,6 +121,10 @@ for(i in 1:nsim) {
   }
   if(is.null(out[[i]][[2]])) {
     cat("simulation",i,"of model 2 failed\n")
+    failed <- c(failed,i)
+  }
+  if(is.null(out[[i]][[3]])) {
+    cat("simulation",i,"of model 3 failed\n")
     failed <- c(failed,i)
   }
 }
@@ -151,6 +177,28 @@ for(sim in failed) {
       }
     } else {
       cat("mod2 simulation",sim,"iteration",nTry,"failed.\n")
+      nTry <- nTry + 1
+    }
+  }
+  
+  set.seed(randomSeeds[sim])
+  mod <- depmix(list(response~1,missing~trial),family=list(gaussian(),binomial()),data=dat,nstates=3,ntimes=rep(nt,nrep))
+  mod <- setpars(mod,truepars3)
+  ok <- FALSE
+  nTry <- 1
+  while(!ok && nTry < 21) {
+    fmod <- try(fit(mod,emcontrol=em.control(maxit = 3000, random.start = nTry > 1),verbose=FALSE))
+    if(!inherits(fmod,"try-error")) {
+      if(fmod@message == "Log likelihood converged to within tol. (relative change)") {
+        cat("mod3 simulation",sim,"iteration",nTry,"completed.\n")
+        out[[sim]][[3]] <- list(pars=getpars(fmod),logLik=logLik(fmod),viterbi=posterior(fmod)[,1],trueState=dat$trueState)
+        ok <- TRUE
+      } else {
+        cat("mod3 simulation",sim,"iteration",nTry,"failed.\n")
+        nTry <- nTry + 1
+      }
+    } else {
+      cat("mod3 simulation",sim,"iteration",nTry,"failed.\n")
       nTry <- nTry + 1
     }
   }
