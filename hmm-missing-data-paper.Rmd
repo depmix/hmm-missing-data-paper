@@ -71,6 +71,7 @@ Let $\obs_{1:\nT} = (\obs_1,\ldots,\obs_\nT)$ denote a time series of (possibly 
 		\dens(\obs_{t}|\state_{t}, \modpar), \quad t=1,2, \ldots, \nT .
 		\label{eq:hmmresponses}
 \end{align}
+where the initial state distribution at time $t=1$ is $\Prob(\state_1|\modpar)$
 Making use of these conditional independencies, the
 joint distribution of observations and states can be stated as
 \begin{equation}
@@ -125,6 +126,17 @@ A special case of MAR is data which is "missing completely at random" (MCAR), wh
 \end{equation}
 
 When the equality in (\ref{eq:MAR_definition}) does not hold, data is said to be missing not at random (MNAR). In this case,  ignoring the missing data will generally lead to biased parameter estimates of $\theta$. Valid inference of $\theta$ requires working with the full likelihood function of (\ref{eq:joint_missing_likelihood}), so explicitly accounting for missingness.
+
+## Multivariate data and conditional independence
+
+The results above are valid when $\obs_t$ is univariate, or when $\obs_t = (\obs^{(1)}_{t},\ldots,\obs^{(K)}_{t})$ is a $K$-variate observation and either all $K$-dimensions are observed, or all $k$-dimensions are missing. We will use the notation $\obs_{1:T}^{(1:K)} = ((\obs^{(1)}_{1},\ldots,\obs_{1}^{(K)}),\ldots,(\obs^{(1)}_{T},\ldots,\obs_{T}^{(K)}))$, and $\obs_{1:T}^{(j)} = (\obs_{1}^{(j)},\ldots,\obs_{T}^{(j)})$. Clearly,
+$$p(\obs_{1:T}^{(1:K)}) = p(\obs^{(1)}_{1:T})\prod_{j=2}^K p(\obs_{1:T}^{(j)}|\obs_{1:T}^{(1:j-1)})$$
+
+
+Let's consider the case of multivariate data more directly, starting with $k=2$ dimensions. We will write $\obs_{1:T}^{(1:2)} = ((\obs_{1,1},\obs_{1,2}),\ldots,(\obs_{T,1},\obs_{T,2}))$, and $\obs_{1:T,j} = ((\obs_{1,1},\obs_{1,2}),\ldots,(\obs_{T,1},\obs_{T,2}))$
+\begin{equation}
+p(Y^{(2)}|Y^{(1)},\modpar^{(2)})p(Y^{(1)}|\modpar^{(1)})
+\end{equation}
 
 ## Missing data in hidden Markov models
 
@@ -249,7 +261,9 @@ load("simulation8.Rdata")
 sim8 <- out
 load("simulation9.Rdata")
 sim9 <- out
+```
 
+```{r simulation-functions, echo=FALSE, message=FALSE, cache = FALSE}
 
 convert_simulation <- function(sim, truepars, orderpars) {
   # sim is list with simulation results
@@ -335,6 +349,9 @@ summarise_simulation3 <- function(sim) {
              percMAE2 = MNAR_time_MAE/MAR_MAE)
   sim_table[c(7:9,13:15,10:12,16:24,4:6,1:3,25:27),]
 }
+```
+
+```{r convert-simulations, echo=FALSE, message=FALSE, cache = TRUE}
     
 ## simulation 1
 # simulation 1
@@ -454,33 +471,8 @@ truepars[[3]] <- c(prior,transition,as.numeric(rbind(means,sds,c(-5,-5,-5),c(.12
 names(truepars[[3]]) <- c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","$\\beta_{0,1}$","$\\beta_{\\text{time},1}$", "$\\mu_2$","$\\sigma_2$","$\\beta_{0,2}$","$\\beta_{\\text{time},2}$","$\\mu_3$","$\\sigma_3$","$\\beta_{0,3}$","$\\beta_{\\text{time},3}$")
 names(truepars) <- c("MAR","MNAR","MNAR_time")
 
-
-bias1 <- matrix(0.0,ncol=length(truepars1),nrow=nsim)
-bias2 <- matrix(0.0,ncol=length(truepars2),nrow=nsim)
-bias3 <- matrix(0.0,ncol=length(truepars3),nrow=nsim)
-
-colnames(bias1) <- names(sim1[[1]][[1]][[1]])
-colnames(bias2) <- names(sim1[[1]][[2]][[1]])
-colnames(bias3) <- names(sim1[[1]][[3]][[1]])
-
-pcorstate1 <- rep(0.0,nsim)
-pcorstate2 <- rep(0.0,nsim)
-pcorstate3 <- rep(0.0,nsim)
-
-simi <- sim5
-#
-for(sim in 1:nsim) {
-  tmp <- simi[[sim]][[1]][[1]]
-  pr <- tmp[1:3]
-  trt <- matrix(tmp[4:12],ncol=3)
-  ms <- tmp[c(13,15,17)]
-  sds <- tmp[c(14,16,18)] 
-  ord <- order(ms)
-  bias1[sim,] <- c(pr[ord],trt[ord,ord],as.numeric(rbind(ms[ord],sds[ord]))) - truepars1
-  fsta <- recode(simi[[sim]][[1]]$viterbi,`1` = which(ord == 1), `2` = which(ord == 2), `3` = which(ord == 3))
-  pcorstate1[sim] <- sum(fsta == simi[[sim]][[1]]$trueState)/(nrep*nt)
-
-  tmp <- simi[[sim]][[2]][[1]]
+orderpars5 <- orderpars
+orderpars5[[3]] <- function(tmp) {
   pr <- tmp[1:3]
   trt <- matrix(tmp[4:12],ncol=3)
   ms <- tmp[c(13,17,21)]
@@ -488,114 +480,92 @@ for(sim in 1:nsim) {
   ps0 <- tmp[c(15,19,23)]
   ps1 <- tmp[c(16,20,24)]
   ord <- order(ms)
-  bias2[sim,] <- c(pr[ord],trt[ord,ord],as.numeric(rbind(ms[ord],sds[ord],ps0[ord],ps1[ord]))) - truepars2
-  fsta <- recode(simi[[sim]][[2]]$viterbi,`1` = which(ord == 1), `2` = which(ord == 2), `3` = which(ord == 3))
-  pcorstate2[sim] <- sum(fsta == simi[[sim]][[2]]$trueState)/(nrep*nt)
-
-  tmp <- simi[[sim]][[3]][[1]]
-  pr <- tmp[1:3]
-  trt <- matrix(tmp[4:12],ncol=3)
-  ms <- tmp[c(13,17,21)]
-  sds <- tmp[c(14,18,22)]
-  ps0 <- tmp[c(15,19,23)]
-  ps1 <- tmp[c(16,20,24)]
-  ord <- order(ms)
-  bias3[sim,] <- c(pr[ord],trt[ord,ord],as.numeric(rbind(ms[ord],sds[ord],ps0[ord],ps1[ord]))) - truepars3
-  fsta <- recode(simi[[sim]][[3]]$viterbi,`1` = which(ord == 1), `2` = which(ord == 2), `3` = which(ord == 3))
-  pcorstate3[sim] <- sum(fsta == simi[[sim]][[3]]$trueState)/(nrep*nt)
+  out <- c(pr[ord],trt[ord,ord],as.numeric(rbind(ms[ord],sds[ord],ps0[ord],ps1[ord])))
+  names(out) <- names(tmp)
+  return(list(pars=out, ord = ord))
 }
-sim5_bias1 <- bias1
-sim5_bias2 <- bias2
-sim5_bias3 <- bias3
-sim5_est1 <- t(t(bias1) + truepars1)
-sim5_est2 <- t(t(bias2) + truepars2)
-sim5_est3 <- t(t(bias3) + truepars3)
-sim5_pcorstate1 <- pcorstate1
-sim5_pcorstate2 <- pcorstate2
-sim5_pcorstate3 <- pcorstate3
+sim5_conv <- convert_simulation(sim5, truepars, orderpars5)
+sim5_table <- summarise_simulation(sim5_conv)
 
-tmp <- as.data.frame(sim5_est1)
-colnames(tmp) <- c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","$\\mu_2$","$\\sigma_2$","$\\mu_3$","$\\sigma_3$")
-#tmp$pcorstate <- sim5_pcorstate1
-tmp$sim <- 1:nsim
-tmp <- gather(tmp,key="param",value="estimate",-sim)
-tmp$true <- rep(truepars1,each=nsim)
-tmp$method <- "MAR"
-tmp$variance <- "low"
-tmp$missing <- "time"
-sim5_est1_long <- tmp
+# simulation 6
+prior <- c(1,1,1)
+prior <- prior/sum(prior)
+transition <- 1*diag(3) + 1
+transition <- transition/rowSums(transition)
+means <- c(-1,0,1)
+sds <- c(1,1,1)
+pmiss <- c(.05,.25,.5)
+truepars <- list()
+truepars[[1]] <- c(prior,transition,as.numeric(rbind(means,sds)))
+names(truepars[[1]]) <- c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","$\\mu_2$","$\\sigma_2$","$\\mu_3$","$\\sigma_3$")
+truepars[[2]] <- c(prior,transition,as.numeric(rbind(means,sds,1-pmiss,pmiss)))
+names(truepars[[2]]) <-  c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","pnm_1","$p(M=1|S=1)$","$\\mu_2$","$\\sigma_2$","pnm_2","$p(M=1|S=2)$","$\\mu_3$","$\\sigma_3$","pnm_3","$p(M=1|S=3)$")
+names(truepars) <- c("MAR","MNAR")
 
-tmp <- as.data.frame(sim5_est2)
-colnames(tmp) <- c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","pnm_1","$p(M=1|S=1)$","$\\mu_2$","$\\sigma_2$","pnm_2","$p(M=1|S=2)$","$\\mu_3$","$\\sigma_3$","pnm_3","$p(M=1|S=3)$")
-#tmp$pcorstate <- sim5_pcorstate2
-tmp$sim <- 1:nsim
-tmp <- gather(tmp,key="param",value="estimate",-sim)
-tmp$true <- rep(truepars2,each=nsim)
-tmp$method <- "MNAR"
-tmp$variance <- "low"
-tmp$missing <- "time"
-sim5_est2_long <- tmp
+sim6_conv <- convert_simulation(sim6, truepars, orderpars)
+sim6_table <- summarise_simulation(sim6_conv)
 
-tmp <- as.data.frame(sim5_est3)
-colnames(tmp) <- c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","$\\beta_{0,1}$","$\\beta_{\\text{time},1}$", "$\\mu_2$","$\\sigma_2$","$\\beta_{0,2}$","$\\beta_{\\text{time},2}$","$\\mu_3$","$\\sigma_3$","$\\beta_{0,3}$","$\\beta_{\\text{time},3}$")
-#tmp$pcorstate <- sim5_pcorstate3
-tmp$sim <- 1:nsim
-tmp <- gather(tmp,key="param",value="estimate",-sim)
-tmp$true <- rep(truepars3,each=nsim)
-tmp$method <- "MNAR_time"
-tmp$variance <- "low"
-tmp$missing <- "time"
-sim5_est3_long <- tmp
+# simulation 7
+prior <- c(1,1,1)
+prior <- prior/sum(prior)
+transition <- 1*diag(3) + 1
+transition <- transition/rowSums(transition)
+means <- c(-1,0,1)
+sds <- c(1,1,1)
+pmiss <- c(.25,.25,.25)
+truepars <- list()
+truepars[[1]] <- c(prior,transition,as.numeric(rbind(means,sds)))
+names(truepars[[1]]) <- c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","$\\mu_2$","$\\sigma_2$","$\\mu_3$","$\\sigma_3$")
+truepars[[2]] <- c(prior,transition,as.numeric(rbind(means,sds,1-pmiss,pmiss)))
+names(truepars[[2]]) <-  c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","pnm_1","$p(M=1|S=1)$","$\\mu_2$","$\\sigma_2$","pnm_2","$p(M=1|S=2)$","$\\mu_3$","$\\sigma_3$","pnm_3","$p(M=1|S=3)$")
+names(truepars) <- c("MAR","MNAR")
 
-all_long <- rbind(
-  sim1_est1_long,
-  subset(sim1_est2_long,!(param %in% c("pnm_1","pnm_2","pnm_3"))),
-  sim2_est1_long,
-  subset(sim2_est2_long,!(param %in% c("pnm_1","pnm_2","pnm_3"))),
-  sim3_est1_long,
-  subset(sim3_est2_long,!(param %in% c("pnm_1","pnm_2","pnm_3"))),
-  sim4_est1_long,
-  subset(sim4_est2_long,!(param %in% c("pnm_1","pnm_2","pnm_3")))
-)
+sim7_conv <- convert_simulation(sim7, truepars, orderpars)
+sim7_table <- summarise_simulation(sim7_conv)
 
-my_table <- all_long %>% 
-  group_by(param, method, variance, missing) %>%
-    summarize(true = mean(true),
-              mean = mean(estimate),
-              sd = sd(estimate),
-              bias = mean(abs(true - estimate)/abs(true)),
-              MAE = mean(abs(true - estimate))) %>%
-      gather(measure,value,-c(param,method,variance,missing)) %>%
-        recast(param + variance + missing  ~  method + measure)
+# simulation 8
+prior <- c(8,1,1)
+prior <- prior/sum(prior)
+transition <- rbind(c(.8,.15,.05),
+                    c(.0375,.85,.1125),
+                    c(.025,.075,.9))
+means <- c(-1,0,1)
+sds <- c(1,1,1)
+pmiss <- c(.05,.25,.5)
+truepars <- list()
+truepars[[1]] <- c(prior,transition,as.numeric(rbind(means,sds)))
+names(truepars[[1]]) <- c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","$\\mu_2$","$\\sigma_2$","$\\mu_3$","$\\sigma_3$")
+truepars[[2]] <- c(prior,transition,as.numeric(rbind(means,sds,1-pmiss,pmiss)))
+names(truepars[[2]]) <-  c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","pnm_1","$p(M=1|S=1)$","$\\mu_2$","$\\sigma_2$","pnm_2","$p(M=1|S=2)$","$\\mu_3$","$\\sigma_3$","pnm_3","$p(M=1|S=3)$")
+names(truepars) <- c("MAR","MNAR")
 
-sim5_long <- rbind(
-  sim5_est1_long,
-  subset(sim5_est2_long,!(param %in% c("pnm_1","pnm_2","pnm_3"))),
-  sim5_est3_long
-)
+sim8_conv <- convert_simulation(sim8, truepars, orderpars)
+sim8_table <- summarise_simulation(sim8_conv)
 
-my_table_5 <- sim5_long %>% 
-  group_by(param, method, variance, missing) %>%
-    summarize(true = mean(true),
-              mean = mean(estimate),
-              sd = sd(estimate),
-              bias = mean(abs(true - estimate)/abs(true)),
-              MAE = mean(abs(true - estimate))) %>%
-      gather(measure,value,-c(param,method,variance,missing)) %>%
-        recast(param + variance + missing  ~  method + measure)
+# simulation 9
+prior <- c(8,1,1)
+prior <- prior/sum(prior)
+transition <- rbind(c(.8,.15,.05),
+                    c(.0375,.85,.1125),
+                    c(.025,.075,.9))
+means <- c(-1,0,1)
+sds <- c(1,1,1)
+pmiss <- c(.25,.25,.25)
+truepars <- list()
+truepars[[1]] <- c(prior,transition,as.numeric(rbind(means,sds)))
+names(truepars[[1]]) <- c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","$\\mu_2$","$\\sigma_2$","$\\mu_3$","$\\sigma_3$")
+truepars[[2]] <- c(prior,transition,as.numeric(rbind(means,sds,1-pmiss,pmiss)))
+names(truepars[[2]]) <-  c("$\\pi_1$","$\\pi_2$","$\\pi_3$","$a_{11}$","$a_{12}$","$a_{13}$","$a_{21}$","$a_{22}$","$a_{23}$","$a_{31}$","$a_{32}$", "$a_{33}$", "$\\mu_1$","$\\sigma_1$","pnm_1","$p(M=1|S=1)$","$\\mu_2$","$\\sigma_2$","pnm_2","$p(M=1|S=2)$","$\\mu_3$","$\\sigma_3$","pnm_3","$p(M=1|S=3)$")
+names(truepars) <- c("MAR","MNAR")
 
+sim9_conv <- convert_simulation(sim9, truepars, orderpars)
+sim9_table <- summarise_simulation(sim9_conv)
 ```
 
 
 ```{r table-simulation-1, echo=FALSE}
 options(knitr.kable.NA = '-')
-tabsim1 <- my_table %>%
-  filter(variance == "low" & missing == "unequal") %>%
-    dplyr::select(param, MNAR_true, paste0("MAR_",c("mean","sd","MAE"),sep=""),
-         paste0("MNAR_",c("mean","sd","MAE"),sep="")) %>%
-       mutate(percMAE = MNAR_MAE/MAR_MAE)
-tabsim1 <- tabsim1[c(1:3,7:9,4:6,10:nrow(tabsim1)),]
-tabsim1 %>%
+sim1_table %>%
       kable("latex", 
             booktabs = T, 
             col.names=c("parameter","true value","mean", "SD", "MAE", "mean", "SD", "MAE", "rel. MAE"),
@@ -608,16 +578,9 @@ tabsim1 %>%
           add_header_above(c(" " = 1, " " = 1, "MAR" = 3, "MNAR" = 3, " " = 1))
 ```
 
-
 ```{r table-simulation-2, echo=FALSE}
 options(knitr.kable.NA = '-')
-tabsim2 <- my_table %>%
-  filter(variance == "low" & missing == "equal") %>%
-    dplyr::select(param, MNAR_true, paste0("MAR_",c("mean","sd","MAE"),sep=""),
-         paste0("MNAR_",c("mean","sd","MAE"),sep="")) %>%
-       mutate(percMAE = MNAR_MAE/MAR_MAE)
-tabsim2 <- tabsim2[c(1:3,7:9,4:6,10:nrow(tabsim2)),]
-tabsim2 %>%
+sim2_table %>%
       kable("latex", 
             booktabs = T, 
             col.names=c("parameter","true value","mean", "SD", "MAE", "mean", "SD", "MAE", "rel. MAE"),
@@ -675,9 +638,9 @@ tabsim4 %>%
 ```{r load-classification-accuracy}
 load("classification_accuracy.RData")
 ```
-The results of simulation 1 (Table \ref{tab:table-simulation-1}) show that, when states are relatively well separated, both models provide parameter estimates which are, on average, reasonably close to the true values. Both models have the tendency to estimate the means as more dispersed, and the standard deviations as slightly smaller, then they really are. While wrongly assuming MAR may not lead to overly biased estimates, we see that the mean absolute error (MAE) for the MNAR model is always smaller than that of the MAR model, reducing the estimation error to as much as `r round(min(tabsim1$percMAE,na.rm=TRUE),2)*100`\%. As such, accounting for state-dependent missingness increases the accuracy of the parameter estimates. We next consider recovery of the hidden states, by comparing the true hidden state sequences to the maximum a posteriori state sequences determined by the Viterbi algorithm [see @Rabiner1989;@visser2021hidden]. The MAR model recovers `r round(mean(sim1_pcorstate1)*100,2)`\% of the states, while the MNAR model recovers `r round(mean(sim1_pcorstate2)*100,2)`\% of the states. The accuracy in recovering the hidden states is thus higher in the model which correctly accounts for missingness. Whilst the performance of neither model may seem overly impressive, we should note that recovering the hidden states is a non-trivial task when the state-conditional response distributions have considerable overlap (see Figure \ref{fig:simulation-response-distributions}) and states do not persist for long periods of time (here, the true self-transitions probabilities are $a_{ii} = .75$, meaning that states have an average run-length of 4 consecutive time-points). When ignoring time-dependencies and treating the observed data as coming from a bivariate mixture distribution over $\obs$ and $M$, the maximum accuracy in classification would be `r round((.95*(1/3)*pnorm(-.5,mean=-1, sd = 1) + .75*(1/3)*(pnorm(.5,mean=0, sd = 1) - pnorm(.5,mean=0, sd = 1)) + .5*(1/3)*(1-pnorm(.5, mean=1, sd=1)) + (1/3)*(.05 + .25 + .5)*(.5/(.05+.25+.5)))*100,2)`% for this data. The theoretical maximum classification accuracy for the hidden Markov model is more difficult to establish, but simulations show that the MNAR model with the true parameters recovers `r round(100*mean(sim1_MNAR_acc),2)`% of the true states. For the MAR model, the approximate maximum classification accuracy is `r round(100*mean(sim1_MAR_acc),2)`%.
+The results of simulation 1 (Table \ref{tab:table-simulation-1}) show that, when states are relatively well separated, both models provide parameter estimates which are, on average, reasonably close to the true values. Both models have the tendency to estimate the means as more dispersed, and the standard deviations as slightly smaller, then they really are. While wrongly assuming MAR may not lead to overly biased estimates, we see that the mean absolute error (MAE) for the MNAR model is always smaller than that of the MAR model, reducing the estimation error to as much as `r round(min(sim1_table$percMAE,na.rm=TRUE),2)*100`\%. As such, accounting for state-dependent missingness increases the accuracy of the parameter estimates. We next consider recovery of the hidden states, by comparing the true hidden state sequences to the maximum a posteriori state sequences determined by the Viterbi algorithm [see @Rabiner1989;@visser2021hidden]. The MAR model recovers `r round(mean(sim1_conv$pcorstate[[1]])*100,2)`\% of the states, while the MNAR model recovers `r round(mean(sim1_conv$pcorstate[[2]])*100,2)`\% of the states. The accuracy in recovering the hidden states is thus higher in the model which correctly accounts for missingness. Whilst the performance of neither model may seem overly impressive, we should note that recovering the hidden states is a non-trivial task when the state-conditional response distributions have considerable overlap (see Figure \ref{fig:simulation-response-distributions}) and states do not persist for long periods of time (here, the true self-transitions probabilities are $a_{ii} = .75$, meaning that states have an average run-length of 4 consecutive time-points). When ignoring time-dependencies and treating the observed data as coming from a bivariate mixture distribution over $\obs$ and $M$, the maximum accuracy in classification would be `r round((.95*(1/3)*pnorm(-.5,mean=-1, sd = 1) + .75*(1/3)*(pnorm(.5,mean=0, sd = 1) - pnorm(.5,mean=0, sd = 1)) + .5*(1/3)*(1-pnorm(.5, mean=1, sd=1)) + (1/3)*(.05 + .25 + .5)*(.5/(.05+.25+.5)))*100,2)`% for this data. The theoretical maximum classification accuracy for the hidden Markov model is more difficult to establish, but simulations show that the MNAR model with the true parameters recovers `r round(100*mean(sim1_MNAR_acc),2)`% of the true states. For the MAR model, the approximate maximum classification accuracy is `r round(100*mean(sim1_MAR_acc),2)`%.
 
-The results of Simulation 2 (Table \ref{tab:table-simulation-2}) show that when data is in fact MAR, both models provide roughly equally accurate parameter estimates. While the MNAR model does not provide better parameter estimates, including a model component for state-dependent missingness does not seem to bias parameter estimates compared to the MAR model. As can be seen, the state-wise missingness probabilities are, on average, close to the true values of .25. Over all parameters, the relative MAE of the models is `r round(mean(tabsim2$percMAE,na.rm=TRUE),3)` on average, which shows the models perform equally well. In terms of recovering the hidden states, the MAR model recovers `r round(mean(sim2_pcorstate1)*100,2)`\% of the states, while the MNAR model recovers `r round(mean(sim2_pcorstate2)*100,2)`\% of the states. The somewhat reduced recovery rate of the MNAR model compared to Simulation 1 is likely due to the fact that here, missingness provides no information about the identity of the hidden state. Here, the maximum classification accuracy is `r round((.75*(1/3)*pnorm(-.5,mean=-1, sd = 1) + .75*(1/3)*(pnorm(.5,mean=0, sd = 1) - pnorm(.5,mean=0, sd = 1)) + .75*(1/3)*(1-pnorm(.5, mean=1, sd=1)) + (1/3)*(.25 + .25 + .25)*(.25/(.25+.25+.25)))*100,2)`% for a mixture model, and approximately `r round(100*mean(sim2_MNAR_acc),2)`% for the hidden Markov models.
+The results of Simulation 2 (Table \ref{tab:table-simulation-2}) show that when data is in fact MAR, both models provide roughly equally accurate parameter estimates. While the MNAR model does not provide better parameter estimates, including a model component for state-dependent missingness does not seem to bias parameter estimates compared to the MAR model. As can be seen, the state-wise missingness probabilities are, on average, close to the true values of .25. Over all parameters, the relative MAE of the models is `r round(mean(sim2_table$percMAE,na.rm=TRUE),3)` on average, which shows the models perform equally well. In terms of recovering the hidden states, the MAR model recovers `r round(mean(sim2_conv$pcorstate[[1]])*100,2)`\% of the states, while the MNAR model recovers `r round(mean(sim2_conv$pcorstate[[2]])*100,2)`\% of the states. The somewhat reduced recovery rate of the MNAR model compared to Simulation 1 is likely due to the fact that here, missingness provides no information about the identity of the hidden state. Here, the maximum classification accuracy is `r round((.75*(1/3)*pnorm(-.5,mean=-1, sd = 1) + .75*(1/3)*(pnorm(.5,mean=0, sd = 1) - pnorm(.5,mean=0, sd = 1)) + .75*(1/3)*(1-pnorm(.5, mean=1, sd=1)) + (1/3)*(.25 + .25 + .25)*(.25/(.25+.25+.25)))*100,2)`% for a mixture model, and approximately `r round(100*mean(sim2_MNAR_acc),2)`% for the hidden Markov models.
 
 In Simulation 3 (Table \ref{tab:table-simulation-3}) and 4 (Table \ref{tab:table-simulation-4}) the states are less well-separated, making accurate parameter estimation more difficult. Here, the tendency to estimate the means as more dispersed and the standard deviations as smaller than they are becomes more pronounced. For both models the estimation error in Simulation 3 (Table \ref{tab:table-simulation-3}) is larger than for Simulation 1, but comparing the MAE for both models again shows the substantial benefits for including a missingness model. Over all parameters, the relative MAE of the models is `r round(mean(tabsim3$percMAE,na.rm=TRUE),3)` on average, which shows the MNAR model clearly outperforms the MAR model. In terms of recovering the hidden states, the MAR model recovers `r round(mean(sim3_pcorstate1)*100,2)`\% of the states, while the MNAR model recovers `r round(mean(sim3_pcorstate2)*100,2)`\% of the states. As in Simulation 1, the MNAR model performs better in state identification. For both models, performance is lower than in Simulation 1, reflecting the increased difficulty due to increased overlap of the state-conditional response distributions (Figure \ref{fig:simulation-response-distributions}). Indeed, the performance of the MAR model is close to chance (random assignment of states would give an expected accuracy of 33.33\%). The maximum classification accuracy is `r round((.95*(1/3)*pnorm(-.5,mean=-1, sd = 3) + .75*(1/3)*(pnorm(.5,mean=0, sd = 3) - pnorm(.5,mean=0, sd = 3)) + .5*(1/3)*(1-pnorm(.5, mean=1, sd=3)) + (1/3)*(.05 + .25 + .5)*(.5/(.05+.25+.5)))*100,2)`% for a mixture model, and approximately 
 `r round(100*mean(sim3_MNAR_acc),2)`% for the MNAR and `r round(100*mean(sim3_MAR_acc),2)`% for the MAR hidden Markov models. 
