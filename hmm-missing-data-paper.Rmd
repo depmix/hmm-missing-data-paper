@@ -34,7 +34,7 @@ abstract: |
   application of the state- and time-dependent MNAR hidden Markov model to a 
   real dataset, involving severity of schizophrenic symptoms in a clinical 
   trial.
-classoption: mathptm, crc, oneside
+classoption: mathptm, draft, oneside
 output:
   rticles::rss_article:
     includes:
@@ -127,20 +127,41 @@ A special case of MAR is data which is "missing completely at random" (MCAR), wh
 
 When the equality in (\ref{eq:MAR_definition}) does not hold, data is said to be missing not at random (MNAR). In this case,  ignoring the missing data will generally lead to biased parameter estimates of $\theta$. Valid inference of $\theta$ requires working with the full likelihood function of (\ref{eq:joint_missing_likelihood}), so explicitly accounting for missingness.
 
-## Multivariate data and conditional independence
+## Multivariate data with partially missing values
 
-The results above are valid when $\obs_t$ is univariate, or when $\obs_t = (\obs^{(1)}_{t},\ldots,\obs^{(K)}_{t})$ is a $K$-variate observation and either all $K$-dimensions are observed, or all $k$-dimensions are missing. We will use the notation $\obs_{1:T}^{(1:K)} = ((\obs^{(1)}_{1},\ldots,\obs_{1}^{(K)}),\ldots,(\obs^{(1)}_{T},\ldots,\obs_{T}^{(K)}))$, and $\obs_{1:T}^{(j)} = (\obs_{1}^{(j)},\ldots,\obs_{T}^{(j)})$. Clearly,
-$$p(\obs_{1:T}^{(1:K)}) = p(\obs^{(1)}_{1:T})\prod_{j=2}^K p(\obs_{1:T}^{(j)}|\obs_{1:T}^{(1:j-1)})$$
+The results above are valid when $\obs_t$ is univariate, or when $\obs_t = (\obs^{(1)}_{t},\ldots,\obs^{(K)}_{t})$ is a $K$-variate observation, yet $M_t$ is univariate. This is the case when either all $K$-dimensions are fully observed, or all $k$-dimensions are missing. 
 
-
-Let's consider the case of multivariate data more directly, starting with $k=2$ dimensions. We will write $\obs_{1:T}^{(1:2)} = ((\obs_{1,1},\obs_{1,2}),\ldots,(\obs_{T,1},\obs_{T,2}))$, and $\obs_{1:T,j} = ((\obs_{1,1},\obs_{1,2}),\ldots,(\obs_{T,1},\obs_{T,2}))$
-\begin{equation}
-p(Y^{(2)}|Y^{(1)},\modpar^{(2)})p(Y^{(1)}|\modpar^{(1)})
-\end{equation}
+Here, we will consider the case where $\obs_t$ is multivariate whilst allowing that only a subset of the $K$ dimensions are missing. To do so, we will use the more explicit notation $\obs_{1:T}^{(1:K)} = ((\obs^{(1)}_{1},\ldots,\obs_{1}^{(K)}),\ldots,(\obs^{(1)}_{T},\ldots,\obs_{T}^{(K)}))$, and $\obs_{1:T}^{(j)} = (\obs_{1}^{(j)},\ldots,\obs_{T}^{(j)})$. We will use similar notation for the missingness indicators, i.e. $M_{1:T}^{(1:K)}$ and $M_{1:T}^{(j)}$, as well as $\mathcal{\obs}_{\text{obs}}^{(1:K)} = (\mathcal{\obs}_{\text{obs}}^{(1)}, \ldots, \mathcal{\obs}_{\text{obs}}^{(K)})$ and $\mathcal{\obs}_{\text{obs}}^{(j)} = \mathcal{\obs}_{\text{obs}}^{(j)}$ and similarly for $\mathcal{\obs}_{\text{miss}}^{(1:K)}$ and $\mathcal{\obs}_{\text{miss}}^{(j)}$. Clearly, by the chain rule of probability, the complete data likelihood can be factored as follows: <!-- we can always write the full joint distribution as:
+$$p(M_{1:T}^{(1:K)}, \obs_{1:T}^{(1:K)}|\gvc{\phi},\modpar) = p(M^{(1)}_{1:T}, \obs^{(1)}_{1:T}|\gvc{\phi}, \modpar)\prod_{j=2}^K p(M^{(j)}_{1:T},\obs_{1:T}^{(j)}|M^{(1:j-1)}_{1:T}, \obs_{1:T}^{(1:j-1)}|\gvc{\phi}, \modpar)$$
+or in the case of missing data more explicitly: 
+\begin{multline}
+p(M_{1:T}^{(1:K)}, \mathcal{\obs}_{\text{obs}}^{(1:K)}, \mathcal{\obs}_{\text{miss}}^{(1:K)}|\gvc{\phi},\modpar) = p(M^{(1)}_{1:T}, \mathcal{\obs}_{\text{obs}}^{(1)}, \mathcal{\obs}_{\text{miss}}^{(1)}|\gvc{\phi}, \modpar) \\
+\times \prod_{j=2}^K p(M^{(j)}_{1:T}|M^{(1:j-1)}_{1:T}, \mathcal{\obs}_{\text{obs}}^{(1:j)}, \mathcal{\obs}_{\text{miss}}^{(1:j)}, \gvc{\phi}, \modpar) \\
+\times p(\mathcal{\obs}_{\text{obs}}^{(j)}, \mathcal{\obs}_{\text{miss}}^{(j)}|M^{(1:j-1)}_{1:T}, \mathcal{\obs}_{\text{obs}}^{(1:j-1)}, \mathcal{\obs}_{\text{miss}}^{(1:j-1)}, \gvc{\phi}, \modpar)
+\end{multline}
+-->
+\begin{multline}
+l(\gvc{\phi},\modpar | M_{1:T}^{(1:K)}, \mathcal{\obs}_{\text{obs}}^{(1:K)}, \mathcal{\obs}_{\text{miss}}^{(1:K)}) = p(
+\mathcal{\obs}_{\text{obs}}^{(1:K)}, \mathcal{\obs}_{\text{miss}}^{(1:K)}|\gvc{\phi},\modpar) p(M^{(1)}_{1:T}| \mathcal{\obs}_{\text{obs}}^{(1:K)}, \mathcal{\obs}_{\text{miss}}^{(1:K)},\gvc{\phi}, \modpar) \\
+\times \prod_{j=2}^K p(M^{(j)}_{1:T}|M^{(1:j-1)}_{1:T} \mathcal{\obs}_{\text{obs}}^{(1:K)}, \mathcal{\obs}_{\text{miss}}^{(1:K)}, \gvc{\phi}, \modpar)
+\end{multline}
+When $\gvc{\phi}$ and $\modpar$ are separable as before<!-- , but in addition, that $\gvc{\phi}$ is also separable "within", such that
+<!--
+$$\begin{aligned}
+\Omega_{\gvc{\phi}} &= \Omega_{\gvc{\phi}^{(1)}} \times \Omega_{\gvc{\phi}^{(2)}} \times \ldots \times \Omega_{\gvc{\phi}^{(K)}}\\
+\Omega_{\modpar} &= \Omega_{\modpar^{(1)}} \times \Omega_{\phi^{(2)}} \times \ldots \times \Omega_{\modpar^{(K)}}
+\end{aligned}$$
+and that
+$$\Omega_{\gvc{\phi}} = \Omega_{\gvc{\phi}^{(1)}} \times \Omega_{\gvc{\phi}^{(2)}} \times \ldots \times \Omega_{\gvc{\phi}^{(K)}}$$ -->
+and that
+\begin{multline}
+l(\gvc{\phi},\modpar|M_{1:T}^{(1:K)}, \mathcal{\obs}_{\text{obs}}^{(1:K)}, \mathcal{\obs}_{\text{miss}}^{(1:K)}) = p(\mathcal{\obs}_{\text{obs}}^{(1:K)}, \mathcal{\obs}_{\text{miss}}^{(1:K)}|\modpar) \prod_{j=1}^K p(M^{(j)}_{1:T}|\mathcal{\obs}_{\text{obs}}^{(1:K)}, \gvc{\phi})
+\end{multline}
+with $p(\mathcal{\obs}_{\text{obs}}^{(1:K)}|\modpar) = \int p(\mathcal{\obs}_{\text{obs}}^{(1:K)}, \mathcal{\obs}_{\text{miss}}^{(1:K)} |\modpar) d \mathcal{\obs}_{\text{miss}}^{(1:K)}$, then data is missing-at-random (MAR). 
 
 ## Missing data in hidden Markov models
 
-Hidden Markov models by definition include missing data, as the hidden states are unobservable (i.e. always missing). When there are no missing values for the observed variable $\obs$, it is easy to see that inference on $\modpar$ in HMMs targets the correct likelihood. Replacing $\mathcal{\obs}_{\text{miss}}$ by $\state_{1:\nT}$, and noting that $\Prob(M_{1:\nT}|\mathcal{\obs}_{\text{obs}},\state_{1:\nT}) = \Prob(M_{1:\nT}) = 1$, the missing states can be considered missing completely at random (MCAR).
+Hidden Markov models by definition include missing data, as the hidden states $\state$ are by definition unobservable (i.e. always missing). When there are no missing values for the response variable $\obs_{1:\nT}^{(1:K)}$, it is straightforward to show that inference on $\modpar$ in HMMs targets the correct likelihood. Let $Y_{1:\nT}^{(K+1)} = \state_{1:\nT}$, and thus $\mathcal{\obs}^{(1:K+1)}_{\text{miss}} = \mathcal{\obs}^{(K+1)}_{\text{miss}} = \state_{1:\nT}$, $\mathcal{\obs}^{(1:K+1)}_{\text{obs}} = \mathcal{\obs}^{(1:K)}_{\text{obs}} = \obs^{(1:K)}_{1:\nT}$, $\Prob(M_{1:\nT}^{(1:K)}|\mathcal{\obs}_{\text{obs}},\mathcal{\obs}_{\text{miss}}, \phi, \modpar) = \Prob(M_{1:\nT}^{(1:K)}) = 0$, and $\Prob(M_{1:\nT}^{(K+1)}|\mathcal{\obs}_{\text{obs}},\mathcal{\obs}_{\text{miss}}, \phi, \modpar) = \Prob(M_{1:\nT}^{(K+1)}) = 1$. As such, the missing states can be considered missing completely at random (MCAR).
 
 We will now focus on the case where the observable response variable $\obs$ does have missing values. The full likelihood, which also depends on the hidden states, can be defined as
 \begin{equation}
@@ -193,15 +214,48 @@ L_\text{full}(\modpar,\gvc{\phi}|\mathcal{\obs}_{\text{obs}},M_{1:\nT}) &\propto
 \end{align*}
 This shows that, although $M$ does not directly depend on $\mathcal{\obs}_\text{miss}$, because both $M$ and $Y$ depend on $\state$, the role of the $\dens{(M|\state,\gvc{\phi})}$ term is more than a scaling factor in the likelihood, and hence missingness is not ignorable.
 
-## Longitudinal data
+## An inhomogoneous hidden Markov model for longitudinal data
 
-The results above are easily generalized to the case of longitudinal data, where there are multiple time-series. Let $Y_{1:N,1:T_i} = (Y_{1,1:T_1}, Y_{2,1:T_2},\ldots,Y_{n,1:T_n}$ denote a set of time-series $Y^{i}_{1:T_i}$, each of length $T_i$. 
+The results above generalize to a more complex hidden Markov model for longitudinal data and potentially inhomogeneous state-transitions. This model is defined for a set of time-series (e.g. time-series for different patients) which may differ in lengths, and includes fully-observed covariates for the state-conditional, state-transition, and initial state distributions.  
+
+The results above are easily generalized to the case of longitudinal data, where there are multiple time-series. Let $\obs^{(1:K)}_{1:N,1:T_i} = (Y_{1,1:T_1}^{(1:K)}, Y_{2,1:T_2}^{(1:K)},\ldots,Y_{n,1:T_n}^{(1:K)})$ denote a set of $K$-variate time-series, each of length $T_i$. Let $\covar^{(1:C)}_{1:N,1:T_i}$ similarly denote a set of $C$ covariates.
 
 \begin{align*}
 L_\text{full}(\modpar,\gvc{\phi}|\mathcal{\obs}_{\text{obs}},M_{1:N,1:\nT_i}) &\propto \sum_{\fstate_{1:N,1:\nT} \in \mathcal{S}^\nT} \int \dens{(\mathcal{\obs}_{\text{obs}},\mathcal{\obs}_{\text{miss}}, \fstate_{1:\nT} |\modpar)} \dens{(M_{1:\nT}|\mathcal{\obs}_{\text{obs}},\mathcal{\obs}_{\text{miss}},\fstate_{1:\nT},\gvc{\phi})} d \mathcal{\obs}_\text{miss} \\
 &= \sum_{\fstate_{1:\nT} \in \mathcal{S}^\nT}  \dens{(M_{1:\nT}|\fstate_{1:\nT},\gvc{\phi})} \times \int \dens{(\mathcal{\obs}_{\text{obs}},\mathcal{\obs}_{\text{miss}}, \fstate_{1:\nT} |\modpar)} d \mathcal{\obs}_\text{miss} \\
 &= \sum_{\fstate_{1:\nT} \in \mathcal{S}^\nT}  \dens{(M_{1:\nT}|\fstate_{1:\nT},\gvc{\phi})} \times \dens{(\mathcal{\obs}_{\text{obs}}, \fstate_{1:\nT} |\modpar)} .
 \end{align*}
+
+### Estimation
+
+The model can be estimated through the Baum-Welch algorithm, which is a variant of the Expectation-Maximization algorithm for hidden Markov models.
+
+#### Expectation
+
+Forward-backward recursions
+
+The forward-variable
+$$\alpha_{i,t}(j) = \dens(m^{(1:K)}_{i,1:t}, \fobs^{(1:K)}_{i,1:t},\state_{i,t} = j)$$
+is computed iteratively as
+$$\alpha_{i,1}(j) = \Prob(\state_{i,1} = j|\priorpar,\covar_{i,1}) \prod_{k=1}^K \dens(m^{(k)}_{i,1} | \phi^{(k)}, \covar_{i,1}) \dens^*(\fobs^{(k)}_{i,1} | \covar_{i,1}, \resppar^{(j)})$$
+and for $t > 1$, as
+$$\alpha_{i,t}(j) = \sum_{l=1}^{\ns} \alpha_{i,t-1}(l) P(\state_{i,t} = i|\state_{i,t-1}=l, \covar{i,t-1}, \transpar) \prod_{k=1}^K \dens^*(m^{(k)}_{i,t} | \phi^{(k)}, \covar_{i,t}) \dens(\fobs^{(k)}_{i,t} | \covar_{i,t}, \resppar^{(j)})  $$
+The backward-variable
+$$\beta_{i,t}(j) = \dens (m^{(1:K)}_{(t+1):{T_i}},\fobs^{(1:K)}_{i,(t+1):{T_i}}|\state_{i,t} = j, \covar_{i,(t+1):{T_i}}, \resppar)$$
+is initialized at $t=T_i$ as
+$$\beta_{T_i}(j) = 1, j = 1, \ldots, \ns$$
+and then for each time $t=T_i - 1, \ldots, 1$ as
+$$\beta_{i,t}(j) = \sum_{l = 1}^\ns \Prob(\state_{i,t+1} = l| \state_{i,t} = j, \covar_{i,t}, transpar) \prod_{k=1}^K \Prob(m_{i,t+1}^{(k)}|\state_{i,t+1} = l, \phi, \covar_{i,t+1}) \dens^*(\fobs_{i,t+1}^{(k)}|\state_{i,t+1} = l, \resppar^{(k)}, \covar_{i,t+1})$$ 
+Furthermore, we define
+$$\begin{aligned}
+\gamma_{i,t}(j) &= \Prob(\state_{i,t} = j| m_{i,1:{T_i}}, \fobs_{i,1:{T_i}}, \covar_{i,1:{T_i}}, \phi,\modpar) \\
+&= \frac{\alpha_{i,t}(j) \beta_{i,t}(j)}{\sum_{l=1}^\ns \alpha_{i,t}(l) \beta_{i,t}(l)}
+\end{aligned}$$
+and
+
+#### Maximization
+
+In the maximisation step, parameter values can be determined for each submodel separately . 
 
 ## Overview
 
@@ -485,7 +539,7 @@ orderpars5[[3]] <- function(tmp) {
   return(list(pars=out, ord = ord))
 }
 sim5_conv <- convert_simulation(sim5, truepars, orderpars5)
-sim5_table <- summarise_simulation(sim5_conv)
+sim5_table <- summarise_simulation3(sim5_conv)
 
 # simulation 6
 prior <- c(1,1,1)
@@ -595,13 +649,7 @@ sim2_table %>%
 
 ```{r table-simulation-3, echo=FALSE}
 options(knitr.kable.NA = '-')
-tabsim3 <- my_table %>%
-  filter(variance == "high" & missing == "unequal") %>%
-    dplyr::select(param, MNAR_true, paste0("MAR_",c("mean","sd","MAE"),sep=""),
-         paste0("MNAR_",c("mean","sd","MAE"),sep="")) %>%
-       mutate(percMAE = MNAR_MAE/MAR_MAE)
-tabsim3 <- tabsim3[c(1:3,7:9,4:6,10:nrow(tabsim3)),]
-tabsim3 %>%
+sim3_table %>%
       kable("latex", 
             booktabs = T, 
             col.names=c("parameter","true value","mean", "SD", "MAE", "mean", "SD", "MAE", "rel. MAE"),
@@ -616,13 +664,7 @@ tabsim3 %>%
 
 ```{r table-simulation-4, echo=FALSE}
 options(knitr.kable.NA = '-')
-tabsim4 <- my_table %>%
-  filter(variance == "high" & missing == "equal") %>%
-    dplyr::select(param, MNAR_true, paste0("MAR_",c("mean","sd","MAE"),sep=""),
-         paste0("MNAR_",c("mean","sd","MAE"),sep="")) %>%
-      mutate(percMAE = MNAR_MAE/MAR_MAE)
-tabsim4 <- tabsim4[c(1:3,7:9,4:6,10:nrow(tabsim4)),]
-tabsim4 %>%
+sim4_table %>%
       kable("latex", 
             booktabs = T, 
             col.names=c("parameter","true value","mean", "SD", "MAE", "mean", "SD", "MAE", "rel. MAE"),
@@ -642,10 +684,10 @@ The results of simulation 1 (Table \ref{tab:table-simulation-1}) show that, when
 
 The results of Simulation 2 (Table \ref{tab:table-simulation-2}) show that when data is in fact MAR, both models provide roughly equally accurate parameter estimates. While the MNAR model does not provide better parameter estimates, including a model component for state-dependent missingness does not seem to bias parameter estimates compared to the MAR model. As can be seen, the state-wise missingness probabilities are, on average, close to the true values of .25. Over all parameters, the relative MAE of the models is `r round(mean(sim2_table$percMAE,na.rm=TRUE),3)` on average, which shows the models perform equally well. In terms of recovering the hidden states, the MAR model recovers `r round(mean(sim2_conv$pcorstate[[1]])*100,2)`\% of the states, while the MNAR model recovers `r round(mean(sim2_conv$pcorstate[[2]])*100,2)`\% of the states. The somewhat reduced recovery rate of the MNAR model compared to Simulation 1 is likely due to the fact that here, missingness provides no information about the identity of the hidden state. Here, the maximum classification accuracy is `r round((.75*(1/3)*pnorm(-.5,mean=-1, sd = 1) + .75*(1/3)*(pnorm(.5,mean=0, sd = 1) - pnorm(.5,mean=0, sd = 1)) + .75*(1/3)*(1-pnorm(.5, mean=1, sd=1)) + (1/3)*(.25 + .25 + .25)*(.25/(.25+.25+.25)))*100,2)`% for a mixture model, and approximately `r round(100*mean(sim2_MNAR_acc),2)`% for the hidden Markov models.
 
-In Simulation 3 (Table \ref{tab:table-simulation-3}) and 4 (Table \ref{tab:table-simulation-4}) the states are less well-separated, making accurate parameter estimation more difficult. Here, the tendency to estimate the means as more dispersed and the standard deviations as smaller than they are becomes more pronounced. For both models the estimation error in Simulation 3 (Table \ref{tab:table-simulation-3}) is larger than for Simulation 1, but comparing the MAE for both models again shows the substantial benefits for including a missingness model. Over all parameters, the relative MAE of the models is `r round(mean(tabsim3$percMAE,na.rm=TRUE),3)` on average, which shows the MNAR model clearly outperforms the MAR model. In terms of recovering the hidden states, the MAR model recovers `r round(mean(sim3_pcorstate1)*100,2)`\% of the states, while the MNAR model recovers `r round(mean(sim3_pcorstate2)*100,2)`\% of the states. As in Simulation 1, the MNAR model performs better in state identification. For both models, performance is lower than in Simulation 1, reflecting the increased difficulty due to increased overlap of the state-conditional response distributions (Figure \ref{fig:simulation-response-distributions}). Indeed, the performance of the MAR model is close to chance (random assignment of states would give an expected accuracy of 33.33\%). The maximum classification accuracy is `r round((.95*(1/3)*pnorm(-.5,mean=-1, sd = 3) + .75*(1/3)*(pnorm(.5,mean=0, sd = 3) - pnorm(.5,mean=0, sd = 3)) + .5*(1/3)*(1-pnorm(.5, mean=1, sd=3)) + (1/3)*(.05 + .25 + .5)*(.5/(.05+.25+.5)))*100,2)`% for a mixture model, and approximately 
+In Simulation 3 (Table \ref{tab:table-simulation-3}) and 4 (Table \ref{tab:table-simulation-4}) the states are less well-separated, making accurate parameter estimation more difficult. Here, the tendency to estimate the means as more dispersed and the standard deviations as smaller than they are becomes more pronounced. For both models the estimation error in Simulation 3 (Table \ref{tab:table-simulation-3}) is larger than for Simulation 1, but comparing the MAE for both models again shows the substantial benefits for including a missingness model. Over all parameters, the relative MAE of the models is `r round(mean(sim3_table$percMAE,na.rm=TRUE),3)` on average, which shows the MNAR model clearly outperforms the MAR model. In terms of recovering the hidden states, the MAR model recovers `r round(mean(sim3_conv$pcorstate[[1]])*100,2)`\% of the states, while the MNAR model recovers `r round(mean(sim3_conv$pcorstate[[2]])*100,2)`\% of the states. As in Simulation 1, the MNAR model performs better in state identification. For both models, performance is lower than in Simulation 1, reflecting the increased difficulty due to increased overlap of the state-conditional response distributions (Figure \ref{fig:simulation-response-distributions}). Indeed, the performance of the MAR model is close to chance (random assignment of states would give an expected accuracy of 33.33\%). The maximum classification accuracy is `r round((.95*(1/3)*pnorm(-.5,mean=-1, sd = 3) + .75*(1/3)*(pnorm(.5,mean=0, sd = 3) - pnorm(.5,mean=0, sd = 3)) + .5*(1/3)*(1-pnorm(.5, mean=1, sd=3)) + (1/3)*(.05 + .25 + .5)*(.5/(.05+.25+.5)))*100,2)`% for a mixture model, and approximately 
 `r round(100*mean(sim3_MNAR_acc),2)`% for the MNAR and `r round(100*mean(sim3_MAR_acc),2)`% for the MAR hidden Markov models. 
 
-When missingness is ignorable (Simulation 4), Like in Simulation 2, inclusion of a missingness component in the HMM does not increase any bias in the parameter estimates. Over all parameters, the relative MAE of the models is `r round(mean(tabsim4$percMAE,na.rm=TRUE),3)` on average, which shows the models perform roughly equally well. The model which ignores missingness recovers `r round(mean(sim4_pcorstate1)*100,2)`\% of the states, while the model with a missingness component recovers `r round(mean(sim4_pcorstate2)*100,2)`\% of the states. For comparison, the maximum accuracy is `r round((.75*(1/3)*pnorm(-.5,mean=-1, sd = 3) + .75*(1/3)*(pnorm(.5,mean=0, sd = 3) - pnorm(.5,mean=0, sd = 3)) + .75*(1/3)*(1-pnorm(.5, mean=1, sd=3)) + (1/3)*(.25 + .25 + .25)*(.25/(.25+.25+.25)))*100,2)`% for a mixture model, and
+When missingness is ignorable (Simulation 4), Like in Simulation 2, inclusion of a missingness component in the HMM does not increase any bias in the parameter estimates. Over all parameters, the relative MAE of the models is `r round(mean(sim4_table$percMAE,na.rm=TRUE),3)` on average, which shows the models perform roughly equally well. The model which ignores missingness recovers `r round(mean(sim4_conv$pcorstate[[1]])*100,2)`\% of the states, while the model with a missingness component recovers `r round(mean(sim4_conv$pcorstate[[2]])*100,2)`\% of the states. For comparison, the maximum accuracy is `r round((.75*(1/3)*pnorm(-.5,mean=-1, sd = 3) + .75*(1/3)*(pnorm(.5,mean=0, sd = 3) - pnorm(.5,mean=0, sd = 3)) + .75*(1/3)*(1-pnorm(.5, mean=1, sd=3)) + (1/3)*(.25 + .25 + .25)*(.25/(.25+.25+.25)))*100,2)`% for a mixture model, and
 `r round(100*mean(sim4_MNAR_acc),2)`% for the hidden Markov models.
 
 Taken together, these simulation results show that if missingness is state-dependent, there is a substantial benefit to including a (relatively simple) model for missingness in the HMM. When missingness is in fact ignorable, including a missingness model is superfluous, but does not bias the results. Hence, there appears to be little risk associated to including a missingness model into the HMM.
@@ -662,13 +704,7 @@ This model should be able to capture the true pattern of missingness, whilst the
 
 ```{r table-simulation-5, echo=FALSE}
 options(knitr.kable.NA = '-')
-tabsim5 <- my_table_5 %>%
-    dplyr::select(param, MNAR_time_true, paste0("MAR_",c("mean","sd","MAE"),sep=""),
-         paste0("MNAR_",c("mean","sd","MAE"),sep=""),
-         paste0("MNAR_time_",c("mean","sd","MAE"),sep="")) %>%
-      mutate(percMAE1 = MNAR_MAE/MAR_MAE,
-             percMAE2 = MNAR_time_MAE/MAR_MAE)
-tabsim5[c(7:9,13:15,10:12,16:24,4:6,1:3,25:27),] %>%
+sim5_table %>%
       kable("latex", 
             booktabs = T, 
             col.names=c("parameter","true value","mean", "SD", "MAE", "mean", "SD", "MAE","mean", "SD", "MAE","rel. MAE 1", "rel. MAE 2"),
@@ -680,8 +716,8 @@ tabsim5[c(7:9,13:15,10:12,16:24,4:6,1:3,25:27),] %>%
         kable_styling(latex_options = c("scale_down"), position="left") %>%
           add_header_above(c(" " = 1, " " = 1, "MAR" = 3, "MNAR (state)" = 3, "MNAR (time)" = 3, " " = 2))
 ```
-The results (Table \ref{tab:table-simulation-5}) show that, compared to the MAR model, the MNAR model which misspecifies missingness as state-dependent is inferior, resulting in more biased parameter estimates. Over all parameters, the relative MAE of these two models is `r round(mean(tabsim5$percMAE1,na.rm=TRUE),3)` on average, indicating the MAR model outperforms the MNAR (state) model. To account for the increase in missing values later in time, the MNAR (state) model estimates the probability of missingness as highest for state 2, which is estimated to have a mean of close to 0, but an increased standard deviation to incorporate observations from the other two states. To make state 2 more prevalent over time, transition probabilities to state 2 are relatively low from state 1 and 2 (parameters $a_{12}$ and $a_{32}$ respectively), whilst self-transitions ($a_{22}$) are close to 1 (meaning that once in state 2, the hidden state sequence is very likely to remain in that state. The prevalence of state 2 is thus increasing over time, and as this state has a higher probability of missingness, so is the prevalence of missing values. 
-The MNAR (time) model, which allows missingness to depend on both the hidden states and time, performs only slightly worse than the MAR model, with an average relative MAE over all parameters of this model compared to the MAR of `r round(mean(tabsim5$percMAE2,na.rm=TRUE),3)`. However, the MNAR (time) model is able to capture the pattern of attrition (increased missing data over time), whilst the MAR model is not. As such, the MNAR (time) model may be deemed preferable to the MAR model, insofar as one is interested in more than modelling the responses $\obs$. In terms of recovering the hidden states, the MAR model recovers `r round(mean(sim5_pcorstate1)*100,2)`\% of the states, and the MNAR (time) model recovers `r round(mean(sim5_pcorstate3)*100,2)`\% of the states. The misspecified MNAR (state) model recovers `r round(mean(sim5_pcorstate2)*100,2)`\% of the states. The maximum classification accuracy for this data is `r round(((1-mean(1/(1+exp(-(.125*1:50 - 5)))))*(1/3)*pnorm(-.5,mean=-1, sd = 1) + (1-mean(1/(1+exp(-(.125*1:50 - 5)))))*(1/3)*(pnorm(.5,mean=0, sd = 1) - pnorm(.5,mean=0, sd = 1)) + (1-mean(1/(1+exp(-(.125*1:50 - 5)))))*(1/3)*(1-pnorm(.5, mean=1, sd=1)) + (mean(1/(1+exp(-(.125*1:50 - 5)))))*(1/3)) *100,2)`% for a mixture model, and approximately `r round(100*mean(sim5_MAR_acc),2)`% for the hidden Markov models.
+The results (Table \ref{tab:table-simulation-5}) show that, compared to the MAR model, the MNAR model which misspecifies missingness as state-dependent is inferior, resulting in more biased parameter estimates. Over all parameters, the relative MAE of these two models is `r round(mean(sim5_table$percMAE1,na.rm=TRUE),3)` on average, indicating the MAR model outperforms the MNAR (state) model. To account for the increase in missing values later in time, the MNAR (state) model estimates the probability of missingness as highest for state 2, which is estimated to have a mean of close to 0, but an increased standard deviation to incorporate observations from the other two states. To make state 2 more prevalent over time, transition probabilities to state 2 are relatively low from state 1 and 2 (parameters $a_{12}$ and $a_{32}$ respectively), whilst self-transitions ($a_{22}$) are close to 1 (meaning that once in state 2, the hidden state sequence is very likely to remain in that state. The prevalence of state 2 is thus increasing over time, and as this state has a higher probability of missingness, so is the prevalence of missing values. 
+The MNAR (time) model, which allows missingness to depend on both the hidden states and time, performs only slightly worse than the MAR model, with an average relative MAE over all parameters of this model compared to the MAR of `r round(mean(sim5_table$percMAE2,na.rm=TRUE),3)`. However, the MNAR (time) model is able to capture the pattern of attrition (increased missing data over time), whilst the MAR model is not. As such, the MNAR (time) model may be deemed preferable to the MAR model, insofar as one is interested in more than modelling the responses $\obs$. In terms of recovering the hidden states, the MAR model recovers `r round(mean(sim5_conv$pcorstate[[1]])*100,2)`\% of the states, and the MNAR (time) model recovers `r round(mean(sim5_conv$pcorstate[[3]])*100,2)`\% of the states. The misspecified MNAR (state) model recovers `r round(mean(sim5_conv$pcorstate[[2]])*100,2)`\% of the states. The maximum classification accuracy for this data is `r round(((1-mean(1/(1+exp(-(.125*1:50 - 5)))))*(1/3)*pnorm(-.5,mean=-1, sd = 1) + (1-mean(1/(1+exp(-(.125*1:50 - 5)))))*(1/3)*(pnorm(.5,mean=0, sd = 1) - pnorm(.5,mean=0, sd = 1)) + (1-mean(1/(1+exp(-(.125*1:50 - 5)))))*(1/3)*(1-pnorm(.5, mean=1, sd=1)) + (mean(1/(1+exp(-(.125*1:50 - 5)))))*(1/3)) *100,2)`% for a mixture model, and approximately `r round(100*mean(sim5_MAR_acc),2)`% for the hidden Markov models.
 
 This final simulation shows that when modelling patterns of missing data in hidden Markov models, care should be taken in how this is done. An increase in missing data over time could be due to an underlying higher prevalence of states which result in more missing data, and/or a state-independent increase in missingness over time. In applications where the true reason and pattern of missingness is unknown, it is then advisable to start by allowing for both state- and time-dependent missing data, selecting simpler options when this is warranted by the data.
 
